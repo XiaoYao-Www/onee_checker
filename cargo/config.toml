@@ -1,0 +1,8 @@
+[build]
+target = "x86_64-pc-windows-gnu"
+
+[target.x86_64-pc-windows-gnu]
+linker = "clang"
+rustflags = [
+  "-C", "link-arg=-fuse-ld=lld",
+]
