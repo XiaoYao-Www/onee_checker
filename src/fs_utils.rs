@@ -1,5 +1,3 @@
-// fs_utils.rs
-
 use std::fs;
 use std::path::Path;
 use std::io;
@@ -11,21 +9,26 @@ pub struct FileEntry {
     pub is_dir: bool,
 }
 
-/// 列出指定目錄下的檔案和資料夾
+/// ### 列出目標資料夾下的所有檔案
+///
+/// - path 目標資料夾路徑
 pub fn list_dir(path: &Path) -> io::Result<Vec<FileEntry>> {
     let mut entries: Vec<FileEntry> = Vec::new();
+
     for entry in fs::read_dir(path)? {
-        let entry = entry?;
-        let file_name = entry.file_name().to_string_lossy().into_owned();
+        let entry: fs::DirEntry = entry?;
+        let file_name: String = entry.file_name().to_string_lossy().into_owned();
         if file_name.starts_with('.') { continue; } // 跳過隱藏檔案
-        let metadata = entry.metadata()?;
+        let metadata: fs::Metadata = entry.metadata()?;
+        
         entries.push(FileEntry {
             name: file_name,
             is_dir: metadata.is_dir(),
         });
     }
+
     // 依照名稱排序
-    entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    entries.sort_by(|a: &FileEntry, b: &FileEntry| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(entries)
 }
 

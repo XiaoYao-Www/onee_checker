@@ -1,33 +1,31 @@
-// main.rs
-
-// 引入必要的模組和套件
 mod ui;           // UI 顯示相關
 mod fs_utils;     // 檔案系統操作相關（列出目錄、JSON/文字樹）
 mod hash_utils;   // Hash 計算相關
 
 use std::io::{stdout, Result};
-use crossterm::event::{read, Event, KeyCode, KeyEventKind};
+use std::path::{PathBuf};
+use crossterm::event::{Event, KeyCode, KeyEventKind, read};
 use crossterm::terminal::{enable_raw_mode, disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::execute;
 use ratatui::{Terminal, backend::CrosstermBackend};
 
 fn main() -> Result<()> {
-    // 啟動原始模式並切換到替代螢幕
-    enable_raw_mode()?;                           // 進入 raw mode:contentReference[oaicite:0]{index=0}
+    enable_raw_mode()?;                           // 進入 raw mode
     execute!(stdout(), EnterAlternateScreen)?;    // 進入替代螢幕緩衝
 
     // 建立終端機介面
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    let mut terminal: Terminal<CrosstermBackend<std::io::Stdout>> = Terminal::new(CrosstermBackend::new(stdout()))?;
+
     // 設定起始路徑為目前目錄
-    let mut current_path = std::path::PathBuf::from(".");
+    let mut current_path:PathBuf = std::env::current_dir()?;
     let mut selected: usize = 0; // 列表中選取項目索引
 
     loop {
-        // 取得並排序目前目錄底下的檔案/資料夾清單
-        let entries = fs_utils::list_dir(&current_path)?;
+        let entries: Vec<fs_utils::FileEntry> = fs_utils::list_dir(&current_path)?; // 列出目錄下的檔案和資料夾
+
         // 更新介面顯示
-        terminal.draw(|f| {
-            ui::draw_file_list(f, &entries, selected);
+        terminal.draw(|f: &mut ratatui::Frame<'_>| {
+            ui::draw_file_list(f, &entries, selected, current_path.to_string_lossy().as_ref());
         })?;
 
         // 等待並處理一個鍵盤事件
@@ -57,21 +55,21 @@ fn main() -> Result<()> {
                             selected = 0;
                         }
                     },
-                    KeyCode::Char('h') => {      // 按 'h'：計算選取檔案/資料夾的 SHA256
-                        let entry = &entries[selected];
-                        let path = current_path.join(&entry.name);
-                        hash_utils::hash_selected(&path)?;
-                    },
-                    KeyCode::Char('j') => {      // 按 'j'：輸出選取資料夾的 JSON 結構
-                        let entry = &entries[selected];
-                        let path = current_path.join(&entry.name);
-                        fs_utils::print_json_tree(&path)?;
-                    },
-                    KeyCode::Char('t') => {      // 按 't'：輸出選取資料夾的文字樹結構
-                        let entry = &entries[selected];
-                        let path = current_path.join(&entry.name);
-                        fs_utils::print_txt_tree(&path)?;
-                    },
+                    // KeyCode::Char('h') => {      // 按 'h'：計算選取檔案/資料夾的 SHA256
+                    //     let entry: &fs_utils::FileEntry = &entries[selected];
+                    //     let path: PathBuf = current_path.join(&entry.name);
+                    //     hash_utils::hash_selected(&path)?;
+                    // },
+                    // KeyCode::Char('j') => {      // 按 'j'：輸出選取資料夾的 JSON 結構
+                    //     let entry: &fs_utils::FileEntry = &entries[selected];
+                    //     let path: PathBuf = current_path.join(&entry.name);
+                    //     fs_utils::print_json_tree(&path)?;
+                    // },
+                    // KeyCode::Char('t') => {      // 按 't'：輸出選取資料夾的文字樹結構
+                    //     let entry: &fs_utils::FileEntry = &entries[selected];
+                    //     let path: PathBuf = current_path.join(&entry.name);
+                    //     fs_utils::print_txt_tree(&path)?;
+                    // },
                     _ => {}
                 }
             },
