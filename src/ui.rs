@@ -19,7 +19,7 @@ pub fn draw_file_list(f: &mut Frame, entries: &[FileEntry], selected: usize, cur
         .constraints([Constraint::Percentage(10),
                       Constraint::Percentage(80),
                       Constraint::Percentage(10)])
-        .split(f.size());
+        .split(f.area());
 
     // ----------------- 上面：當前路徑 -----------------
     let path_block: Paragraph<'_> = Paragraph::new(current_path)

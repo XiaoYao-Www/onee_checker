@@ -2,6 +2,7 @@ mod ui;           // UI 顯示相關
 mod fs_utils;     // 檔案系統操作相關（列出目錄、JSON/文字樹）
 mod hash_utils;   // Hash 計算相關
 
+use std::fs;
 use std::io::{stdout, Result};
 use std::path::{PathBuf};
 use crossterm::event::{Event, KeyCode, KeyEventKind, read};
@@ -55,16 +56,22 @@ fn main() -> Result<()> {
                             selected = 0;
                         }
                     },
-                    // KeyCode::Char('h') => {      // 按 'h'：計算選取檔案/資料夾的 SHA256
-                    //     let entry: &fs_utils::FileEntry = &entries[selected];
-                    //     let path: PathBuf = current_path.join(&entry.name);
-                    //     hash_utils::hash_selected(&path)?;
-                    // },
-                    // KeyCode::Char('j') => {      // 按 'j'：輸出選取資料夾的 JSON 結構
-                    //     let entry: &fs_utils::FileEntry = &entries[selected];
-                    //     let path: PathBuf = current_path.join(&entry.name);
-                    //     fs_utils::print_json_tree(&path)?;
-                    // },
+                    KeyCode::Char('h') => {      // 按 'h'：計算選取檔案/資料夾的 SHA256
+                        let entry: &fs_utils::FileEntry = &entries[selected];
+                        let path: PathBuf = current_path.join(&entry.name);
+                        let sha_result: (bool, Vec<hash_utils::ShaData>) = hash_utils::hash_selected(&path)?;
+                        let save_path: PathBuf = current_path.join(format!("{}.sha256", entry.name));
+                        hash_utils::save_checksums(&sha_result.1, &save_path)?;
+                    },
+                    KeyCode::Char('j') => {      // 按 'j'：輸出選取資料夾的 JSON 結構
+                        let entry: &fs_utils::FileEntry = &entries[selected];
+                        if entry.is_dir{
+                            let path: PathBuf = current_path.join(&entry.name);
+                            let json_str: String = fs_utils::get_json_string(&path)?;
+                            let save_path: PathBuf = current_path.join(format!("{}.struct.json", entry.name));
+                            fs::write(&save_path, &json_str)?;
+                        }
+                    },
                     // KeyCode::Char('t') => {      // 按 't'：輸出選取資料夾的文字樹結構
                     //     let entry: &fs_utils::FileEntry = &entries[selected];
                     //     let path: PathBuf = current_path.join(&entry.name);
