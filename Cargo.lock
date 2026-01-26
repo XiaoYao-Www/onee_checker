@@ -3,6 +3,20 @@
 version = 4
 
 [[package]]
+name = "Onee_Archive"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "crossterm",
+ "hex",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "sha2",
+ "walkdir",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -134,9 +148,9 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "chrono"
-version = "0.4.42"
+version = "0.4.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "145052bdd345b87320e369255277e3fb5152762ad123a901ef5c262dd38fe8d2"
+checksum = "fac4744fb15ae8337dc853fee7fb3f4e48c0fbaa23d0afe49c447b4fab126118"
 dependencies = [
  "iana-time-zone",
  "js-sys",
@@ -1011,20 +1025,6 @@ name = "regex-syntax"
 version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
-
-[[package]]
-name = "rust-llvm-test"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "crossterm",
- "hex",
- "ratatui",
- "serde",
- "serde_json",
- "sha2",
- "walkdir",
-]
 
 [[package]]
 name = "rustc_version"
