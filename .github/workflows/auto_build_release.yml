@@ -66,11 +66,11 @@ jobs:
             ext: .exe
             use_cross: false
           - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-musl
             ext: ""
-            use_cross: false
+            use_cross: true
           - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
+            target: aarch64-unknown-linux-musl
             ext: ""
             use_cross: true
 
@@ -106,22 +106,24 @@ jobs:
       - name: 打包壓縮 (Package)
         shell: bash
         run: |
+          VERSION="${{ needs.check_version.outputs.version }}"
           BIN_NAME=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].name')
           DIST_DIR="dist/${{ matrix.target }}"
           mkdir -p "$DIST_DIR"
-          
+
           # 複製執行檔
-          cp "target/${{ matrix.target }}/release/${BIN_NAME}${{ matrix.ext }}" "$DIST_DIR/"
+          cp "target/${{ matrix.target }}/release/${BIN_NAME}${{ matrix.ext }}" \
+            "$DIST_DIR/${BIN_NAME}-${VERSION}${{ matrix.ext }}"
           
           # 進入目錄打包，避免壓縮檔包含路徑
           cd dist
 
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             # 在 Windows 上使用 PowerShell 內建的壓縮功能
-            powershell -Command "Compress-Archive -Path '${{ matrix.target }}' -DestinationPath '${BIN_NAME}-${{ matrix.target }}.zip'"
+            powershell -Command "Compress-Archive -Path '${{ matrix.target }}/*' -DestinationPath '${BIN_NAME}-${VERSION}-${{ matrix.target }}.zip'"
           else
             # 在 Linux/macOS 上使用 zip
-            zip -r "${BIN_NAME}-${{ matrix.target }}.zip" "${{ matrix.target }}"
+            zip -r "${BIN_NAME}-${VERSION}-${{ matrix.target }}.zip" "${{ matrix.target }}"
           fi
 
       - name: 上傳構建產物 (Upload Artifact)
