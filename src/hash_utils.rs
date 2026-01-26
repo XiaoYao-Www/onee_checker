@@ -1,6 +1,7 @@
 use std::fs::{File, DirEntry};
 use std::path::{PathBuf, Path};
 use std::io::{self, Read, Write};
+use std::sync::mpsc::Sender;
 use sha2::{Sha256, Digest};
 
 pub struct ShaData {
@@ -9,12 +10,20 @@ pub struct ShaData {
     pub sha_type: String,
 }
 
+/// 進度回報的訊息類型
+pub enum ProgressMessage {
+    Starting(usize), // 開始，回報總檔案數
+    Hashing(usize, String), // 正在處理第 n 個檔案，檔名
+    Finished, // 全部完成
+}
+
 /// ### 計算選取檔案或資料夾的雜湊值
 /// 
 /// 目前用sha256，回傳(是否為資料夾, 雜湊結果)
 /// 
 /// - path 檔案或資料夾路徑
-pub fn hash_selected(path: &Path) -> io::Result<(bool, Vec<ShaData>)> {
+/// - progress_sender 用於回報進度的發送端
+pub fn hash_selected(path: &Path, progress_sender: Sender<ProgressMessage>) -> io::Result<(bool, Vec<ShaData>)> {
     let mut result: Vec<ShaData> = Vec::new();
 
     // 🔑 以輸入路徑的父目錄作為相對根
@@ -25,8 +34,18 @@ pub fn hash_selected(path: &Path) -> io::Result<(bool, Vec<ShaData>)> {
         collect_files(path, &mut files)?;
         files.sort();
 
-        for file_path in files {
+        let total_files = files.len();
+        if progress_sender.send(ProgressMessage::Starting(total_files)).is_err() {
+            // 如果發送失敗 (例如主執行緒已關閉接收端)，就直接返回
+            return Ok((true, result));
+        }
+
+        for (i, file_path) in files.iter().enumerate() {
             if file_path.is_file() {
+                let file_name = file_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                if progress_sender.send(ProgressMessage::Hashing(i + 1, file_name)).is_err() {
+                    break; // 中斷迴圈
+                }
                 let hash: String = compute_file_hash(&file_path)?;
 
                 // 相對於輸入路徑的父目錄
@@ -48,8 +67,18 @@ pub fn hash_selected(path: &Path) -> io::Result<(bool, Vec<ShaData>)> {
             }
         }
 
+        let _ = progress_sender.send(ProgressMessage::Finished);
         Ok((true, result))
     } else if path.is_file() {
+        if progress_sender.send(ProgressMessage::Starting(1)).is_err() {
+            return Ok((false, result));
+        }
+
+        let file_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+        if progress_sender.send(ProgressMessage::Hashing(1, file_name)).is_err() {
+            return Ok((false, result));
+        }
+
         let hash: String = compute_file_hash(path)?;
 
         let relative_path = path
@@ -68,6 +97,7 @@ pub fn hash_selected(path: &Path) -> io::Result<(bool, Vec<ShaData>)> {
             sha_type: "SHA256".to_string(),
         });
 
+        let _ = progress_sender.send(ProgressMessage::Finished);
         Ok((false, result))
     } else {
         Err(io::Error::new(

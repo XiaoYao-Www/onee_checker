@@ -1,5 +1,3 @@
-use crate::hash_utils;
-
 use chrono::{DateTime, Local};
 use serde::Serialize;
 use std::fs;
@@ -14,8 +12,6 @@ pub struct FileEntry {
 
 /// ### 列出目標資料夾下的所有檔案
 ///
-/// 會跳過隱藏檔案
-///
 /// - path 目標資料夾路徑
 pub fn list_dir(path: &Path) -> io::Result<Vec<FileEntry>> {
     let mut entries: Vec<FileEntry> = Vec::new();
@@ -23,9 +19,6 @@ pub fn list_dir(path: &Path) -> io::Result<Vec<FileEntry>> {
     for entry in fs::read_dir(path)? {
         let entry: fs::DirEntry = entry?;
         let file_name: String = entry.file_name().to_string_lossy().into_owned();
-        if file_name.starts_with('.') {
-            continue;
-        } // 跳過隱藏檔案
         let metadata: fs::Metadata = entry.metadata()?;
 
         entries.push(FileEntry {
@@ -45,8 +38,7 @@ pub fn list_dir(path: &Path) -> io::Result<Vec<FileEntry>> {
 struct Node {
     name: String,
     is_dir: bool,
-    size: Option<u64>,
-    sha: Option<String>,
+    size: u64,
     last_modified: Option<String>,
     children: Option<Vec<Node>>,
 }
@@ -71,17 +63,6 @@ fn build_node(path: &Path) -> io::Result<Node> {
 
     let is_dir: bool = path.is_dir();
 
-    let sha: Option<String> = if !is_dir {
-        let sha_result: (bool, Vec<hash_utils::ShaData>) = hash_utils::hash_selected(path)?;
-        if !sha_result.0 {
-            Some(sha_result.1[0].sha.clone())
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
     let children: Option<Vec<Node>> = if is_dir {
         let mut list: Vec<Node> = Vec::new();
         for entry in fs::read_dir(path)? {
@@ -95,25 +76,18 @@ fn build_node(path: &Path) -> io::Result<Node> {
         None
     };
 
-    let size: Option<u64> = if is_dir {
-        if children.is_some() {
-            let mut size: u64 = 0;
-            for child in children.as_ref().unwrap() {
-                size += child.size.unwrap_or(0);
-            }
-            Some(size)
-        } else {
-            None
-        }
+    let size: u64 = if is_dir {
+        children
+            .as_ref()
+            .map_or(0, |nodes| nodes.iter().map(|n| n.size).sum())
     } else {
-        Some(metadata.len())
+        metadata.len()
     };
 
     Ok(Node {
         name,
         is_dir,
         size,
-        sha,
         last_modified,
         children,
     })
@@ -128,31 +102,35 @@ pub fn get_json_string(path: &Path) -> io::Result<String> {
     Ok(json_str)
 }
 
-// / 以文字型式輸出目錄結構樹
-// pub fn print_txt_tree(path: &Path) -> io::Result<()> {
-//     // 輔助函式：遞迴列印子目錄
-//     fn print_helper(path: &Path, indent: usize) -> io::Result<()> {
-//         for entry in fs::read_dir(path)? {
-//             let entry = entry?;
-//             let file_name = entry.file_name().to_string_lossy().into_owned();
-//             let child_path = entry.path();
-//             if child_path.is_dir() {
-//                 println!("{:indent$}+ {}/", "", file_name, indent = indent);
-//                 print_helper(&child_path, indent + 2)?;
-//             } else {
-//                 println!("{:indent$}- {}", "", file_name, indent = indent);
-//             }
-//         }
-//         Ok(())
-//     }
+/// 以文字型式輸出目錄結構樹
+pub fn get_tree_string(path: &Path) -> io::Result<String> {
+    let mut tree_string = String::new();
+    if let Some(name) = path.file_name() {
+        tree_string.push_str(&name.to_string_lossy());
+        tree_string.push('\n');
+    }
+    build_tree_string_recursive(path, &mut tree_string, "")?;
+    Ok(tree_string)
+}
 
-//     if path.is_dir() {
-//         // 如果選到的是資料夾，先印出資料夾名稱，再印內容
-//         println!("{}:", path.display());
-//         print_helper(path, 2)?;
-//     } else {
-//         // 如果是單一檔案，直接印出檔案路徑
-//         println!("{}", path.display());
-//     }
-//     Ok(())
-// }
+/// 遞迴建構文字樹的輔助函式
+fn build_tree_string_recursive(
+    dir: &Path,
+    tree_string: &mut String,
+    prefix: &str,
+) -> io::Result<()> {
+    let entries = list_dir(dir)?; // 重用 list_dir 來取得排序且過濾後的列表
+    let mut iter = entries.iter().peekable();
+    while let Some(entry) = iter.next() {
+        let is_last = iter.peek().is_none();
+        let connector = if is_last { "└── " } else { "├── " };
+        tree_string.push_str(&format!("{}{}{}\n", prefix, connector, entry.name));
+
+        if entry.is_dir {
+            let new_prefix = if is_last { "    " } else { "│   " };
+            let child_path = dir.join(&entry.name);
+            build_tree_string_recursive(&child_path, tree_string, &format!("{}{}", prefix, new_prefix))?;
+        }
+    }
+    Ok(())
+}

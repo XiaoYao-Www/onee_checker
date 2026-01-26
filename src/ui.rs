@@ -185,7 +185,7 @@ pub fn draw_file_list(f: &mut Frame, entries: &[FileEntry], selected: usize, cur
 
     // 建立功能說明區塊
     let illustrate_block = Paragraph::new(
-        "Enter: 進入, Backspace: 返回, q: 離開, h: 計算.sha256, j: 輸出.struct.json",
+        "Enter: 進入, Backspace: 返回, q: 離開, h: 計算.sha256, j: 輸出.struct.json, t: 輸出.tree.txt",
     )
     .block(
         Block::default()
