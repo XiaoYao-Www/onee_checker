@@ -115,7 +115,14 @@ jobs:
           
           # 進入目錄打包，避免壓縮檔包含路徑
           cd dist
-          zip -r "$BIN_NAME-${{ matrix.target }}.zip" "${{ matrix.target }}"
+
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            # 在 Windows 上使用 PowerShell 內建的壓縮功能
+            powershell -Command "Compress-Archive -Path '${{ matrix.target }}' -DestinationPath '${BIN_NAME}-${{ matrix.target }}.zip'"
+          else
+            # 在 Linux/macOS 上使用 zip
+            zip -r "${BIN_NAME}-${{ matrix.target }}.zip" "${{ matrix.target }}"
+          fi
 
       - name: 上傳構建產物 (Upload Artifact)
         uses: actions/upload-artifact@v4
