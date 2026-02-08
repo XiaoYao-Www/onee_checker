@@ -1,12 +1,13 @@
 // 主程式，負責UI與輸入事件
 use clap::{Parser, Subcommand, ValueEnum};
-use indicatif;
+use indicatif::{self, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::env;
 use std::io::{self};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
+use console::style;
 
 mod system;
 mod types;
@@ -92,14 +93,15 @@ enum Commands {
     /// 生成哈希驗證檔
     Hash {
         /// 要較驗的路徑
-        path: String,
+        #[arg(value_hint = clap::ValueHint::AnyPath)]
+        path: PathBuf,
 
         /// 算法 ( 可多選 )
         #[arg(short, long, value_enum)]
         algo: HashAlgo,
 
         /// 哈希驗證長度
-        #[arg(long, help = "哈希較驗長度，單位為bytes")]
+        #[arg(long, help = "哈希較驗長度(bytes)，未指定的話使用預設值。")]
         length: Option<usize>,
 
         /// 進度條顯示
@@ -109,6 +111,10 @@ enum Commands {
         /// 線程數
         #[arg(long, help = "允許線程數量")]
         thread: Option<usize>,
+
+        /// buffer 大小
+        #[arg(long, help = "算法緩存大小(KB)，預設 1 MB")]
+        buffer: Option<usize>,
     },
 }
 
@@ -124,19 +130,20 @@ fn main() -> io::Result<()> {
             length,
             progress,
             thread,
+            buffer,
         } => {
             // 提取路徑
             let target_path: &Path = Path::new(&path);
 
             // 驗證路徑
             if let Err(info) = utils::FS::validate_path(target_path) {
-                eprintln!("錯誤: {}", info);
+                eprintln!("{} 錯誤: {}", style("✘").red(), info);
                 std::process::exit(1);
             }
 
             // 驗證長度輸入設定
             if !algo.can_specify_length() && length.is_some() {
-                eprintln!("錯誤: 算法 {:?} 無法指定長度", algo);
+                eprintln!("{} 錯誤: 算法 {:?} 無法指定長度", style("✘").red(), algo);
                 std::process::exit(1);
             }
 
@@ -156,12 +163,24 @@ fn main() -> io::Result<()> {
             // 抓取所有檔案路徑
             let file_paths: Vec<PathBuf> = utils::FS::list_file(target_path)?;
 
+            // 創建進度條
+            let progress_bar: Option<ProgressBar> = progress.then(|| {
+                let pb = ProgressBar::new(file_paths.len() as u64);
+                pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+                        .unwrap()
+                        .progress_chars("#>-")
+                );
+                pb
+            });
+
             // 添加任務
             pool.spawn(move || {
                 file_paths
                     .par_iter() // 在當前pool創建任務
                     .map_init(
-                        || vec![0u8; 1024 * 1024], // 1 MB
+                        || vec![0u8; buffer.unwrap_or(1024) * 1024], // 1 MB
                         |buf: &mut Vec<u8>, path: &PathBuf| {
                             system::Hash::compute_file_hash(path, &hash_type, buf).map(|data| {
                                 types::Hash::HashData {
@@ -186,9 +205,17 @@ fn main() -> io::Result<()> {
                         hash_result.push(data);
                     }
                     Err(e) => {
-                        eprintln!("錯誤: {:?}", e);
+                        eprintln!("{} 錯誤: {:?}", style("✘").red(), e);
                     }
-                }
+                };
+                if let Some(bar) = progress_bar.as_ref() {
+                    bar.inc(1);
+                };
+            }
+
+            if let Some(bar) = progress_bar {
+                bar.finish_and_clear();
+                println!("{} 哈希計算完成", style("✔").green());
             }
 
             // 寫入檔案
@@ -201,11 +228,14 @@ fn main() -> io::Result<()> {
                     .to_string_lossy(),
                 utils::Hash::hash_suffix(&hash_type)
             ));
+            hash_result.sort_by(|a: &types::hash_types::HashData, b: &types::hash_types::HashData| a.path.cmp(&b.path));
             utils::FS::save_hash_to_file(
                 &hash_result,
                 &output_path,
                 target_path.parent().unwrap_or(&current_path),
             )?;
+
+            println!("{} 哈希檔案已儲存在: {}", style("✔").green(), output_path.display());
         }
     };
 

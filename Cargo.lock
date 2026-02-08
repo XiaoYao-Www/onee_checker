@@ -9,6 +9,7 @@ dependencies = [
  "blake2",
  "blake3",
  "clap",
+ "console",
  "hex",
  "indicatif",
  "md-5",
