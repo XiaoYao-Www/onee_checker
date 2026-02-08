@@ -1,6 +1,6 @@
 // 檔案系統函式庫
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
+use std::fs::{self, File, DirEntry};
+use std::path::{Path, PathBuf, StripPrefixError};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::io::{self, Write};
 
@@ -17,32 +17,33 @@ use crate::types::FS::FileNode;
 pub fn list_file(path: &Path) -> io::Result<Vec<PathBuf>> {
     let mut entries: Vec<PathBuf> = Vec::new();
 
-    if !path.is_dir() {
-        // 檔案類型
+    // 1. 基本路徑檢查：如果是檔案，直接回傳
+    if path.is_file() {
         entries.push(path.to_path_buf());
         return Ok(entries);
     }
 
-    for entry in fs::read_dir(path)? {
-        // 資料夾類型
-        let entry: fs::DirEntry = entry?;
-        entries.push(entry.path());
+    // 2. 遞迴蒐集檔案
+    fn collect_recursive(dir: &Path, all_files: &mut Vec<PathBuf>) -> io::Result<()> {
+        if dir.is_dir() {
+            for entry in fs::read_dir(dir)? {
+                let entry: DirEntry = entry?;
+                let p: PathBuf = entry.path();
+                if p.is_dir() {
+                    collect_recursive(&p, all_files)?; // 遞迴進去
+                } else {
+                    all_files.push(p); // 檔案才加入
+                }
+            }
+        }
+        Ok(())
     }
 
-    // 依照名稱排序
-    entries.sort_by(|a: &PathBuf, b: &PathBuf| {
-        let a_name: String = a
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_lowercase();
-        let b_name: String = b
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_lowercase();
-        a_name.cmp(&b_name)
-    });
+    collect_recursive(path, &mut entries)?;
+
+    // 3. 統一排序 (只需排一次，效率最高)
+    // 建議根據完整路徑排序，避免不同目錄下的同名檔案亂掉
+    entries.sort_by(|a: &PathBuf, b: &PathBuf| a.to_string_lossy().to_lowercase().cmp(&b.to_string_lossy().to_lowercase()));
 
     Ok(entries)
 }
@@ -107,13 +108,32 @@ pub fn build_file_node(path: &Path) -> io::Result<FileNode> {
 ///
 /// - data 雜湊資料列表
 /// - outputFile 輸出檔案路徑
-pub fn save_hash_to_file(data: &[HashData], output_file: &Path) -> io::Result<()> {
+pub fn save_hash_to_file(data: &[HashData], output_file: &Path, root_path: &Path) -> io::Result<()> {
     let mut file: File = File::create(output_file)?;
     for entry in data {
+        let rel_path: &Path = entry.path.strip_prefix(root_path).map_err(|e: StripPrefixError| io::Error::new(io::ErrorKind::InvalidInput, e))?;
         // 轉換路徑分隔符為 /
-        let path_str: String = entry.path.to_string_lossy().replace('\\', "/");
+        let path_str: String = rel_path.to_string_lossy().replace('\\', "/");
         // 寫入驗證資訊，使用 * 表示二進位模式
         writeln!(file, "{} *{}", entry.hash_hex(), path_str)?;
     }
+    Ok(())
+}
+
+/// ### 驗證路徑有效性
+/// 
+/// 驗證路徑是否為存在的檔案或資料夾
+/// 
+/// - path 驗證的路徑
+pub fn validate_path(path: &Path) -> Result<(), String> {
+
+    if !path.exists() {
+        return Err(format!("路徑不存在: {}", path.display()));
+    }
+
+    if !path.is_file() && !path.is_dir() {
+        return Err(format!("路徑不是文件也不是目錄: {}", path.display()));
+    }
+
     Ok(())
 }
