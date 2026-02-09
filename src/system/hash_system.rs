@@ -2,9 +2,8 @@
 use std::fs::File;
 use std::io::{self};
 use std::path::Path;
-use rayon::ThreadPoolBuilder;
 
-use crate::types::Hash::{DynHasher, HashData, HashType};
+use crate::types::Hash::{DynHasher, HashType};
 use crate::utils::hash_utils::compute_hash_reader;
 
 /// ### 計算單一檔案的雜湊值

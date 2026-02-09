@@ -1,5 +1,6 @@
 // 主程式，負責UI與輸入事件
 use clap::{Parser, Subcommand, ValueEnum};
+use console::style;
 use indicatif::{self, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -7,7 +8,6 @@ use std::env;
 use std::io::{self};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
-use console::style;
 
 mod system;
 mod types;
@@ -116,12 +116,20 @@ enum Commands {
         #[arg(long, help = "算法緩存大小(KB)，預設 1 MB")]
         buffer: Option<usize>,
     },
+
+    /// 生成 Json 結構紀錄檔
+    Json {
+        /// 要記錄的路徑
+        #[arg(value_hint = clap::ValueHint::AnyPath)]
+        path: PathBuf,
+    },
 }
 
 // ========== 主程式 ==========
 
 fn main() -> io::Result<()> {
     let cli: Cli = Cli::parse();
+    let current_path: PathBuf = env::current_dir()?;
 
     match cli.command {
         Commands::Hash {
@@ -132,23 +140,20 @@ fn main() -> io::Result<()> {
             thread,
             buffer,
         } => {
-            // 提取路徑
-            let target_path: &Path = Path::new(&path);
-
             // 驗證路徑
-            if let Err(info) = utils::FS::validate_path(target_path) {
+            if let Err(info) = utils::FS::validate_path(&path) {
                 eprintln!("{} 錯誤: {}", style("✘").red(), info);
-                std::process::exit(1);
+                return Ok(());
             }
 
             // 驗證長度輸入設定
             if !algo.can_specify_length() && length.is_some() {
                 eprintln!("{} 錯誤: 算法 {:?} 無法指定長度", style("✘").red(), algo);
-                std::process::exit(1);
+                return Ok(());
             }
 
             // 取得對應的 Hasher
-            let hash_type: types::hash_types::HashType =
+            let hash_type: types::Hash::HashType =
                 algo.get_hasher(length.unwrap_or(algo.default_length()));
 
             // 創建通訊器
@@ -161,11 +166,11 @@ fn main() -> io::Result<()> {
                 .unwrap();
 
             // 抓取所有檔案路徑
-            let file_paths: Vec<PathBuf> = utils::FS::list_file(target_path)?;
+            let file_paths: Vec<PathBuf> = utils::FS::list_file(&path)?;
 
             // 創建進度條
             let progress_bar: Option<ProgressBar> = progress.then(|| {
-                let pb = ProgressBar::new(file_paths.len() as u64);
+                let pb: ProgressBar = ProgressBar::new(file_paths.len() as u64);
                 pb.set_style(
                     ProgressStyle::default_bar()
                         .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
@@ -219,23 +224,50 @@ fn main() -> io::Result<()> {
             }
 
             // 寫入檔案
-            let current_path: PathBuf = env::current_dir()?;
             let output_path: PathBuf = current_path.join(format!(
                 "{}.{}",
-                target_path
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy(),
+                path.file_name().unwrap_or_default().to_string_lossy(),
                 utils::Hash::hash_suffix(&hash_type)
             ));
-            hash_result.sort_by(|a: &types::hash_types::HashData, b: &types::hash_types::HashData| a.path.cmp(&b.path));
+            hash_result.sort_by(|a: &types::Hash::HashData, b: &types::Hash::HashData| {
+                a.path.cmp(&b.path)
+            });
             utils::FS::save_hash_to_file(
                 &hash_result,
                 &output_path,
-                target_path.parent().unwrap_or(&current_path),
+                path.parent().unwrap_or(&current_path),
             )?;
 
-            println!("{} 哈希檔案已儲存在: {}", style("✔").green(), output_path.display());
+            println!(
+                "{} 哈希已儲存在: {}",
+                style("✔").green(),
+                output_path.display()
+            );
+        }
+
+        Commands::Json { path } => {
+            if !path.exists() || !path.is_dir() {
+                eprintln!("{} 錯誤: 輸入路徑並非資料夾", style("✘").red());
+                return Ok(());
+            }
+
+            // 取得 Node
+            let nodes: types::FS::FileNode = utils::FS::build_file_node(&path)?;
+
+            // 寫入檔案
+            let output_path: PathBuf = current_path.join(format!(
+                "{}.{}",
+                path.file_name().unwrap_or_default().to_string_lossy(),
+                "struct.json"
+            ));
+
+            utils::FS::save_file_node_to_file(&nodes, &output_path)?;
+
+            println!(
+                "{} 結構紀錄已儲存在: {}",
+                style("✔").green(),
+                output_path.display()
+            );
         }
     };
 
