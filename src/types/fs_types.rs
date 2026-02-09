@@ -7,9 +7,9 @@ use serde::{self, Deserialize, Serialize};
 /// - is_dir 是否是資料夾
 /// - is_symlink 是否是符號連結
 /// - extension 擴展名稱
-/// - size 節點大小(資料夾是其內所有檔案的綜合大小)
-/// - last_modified 最後編輯日期( UNIX timestamp )
-/// - created_at 創建日期( UNIX timestamp )
+/// - size 節點位元組大小(資料夾是其內所有檔案的綜合大小)
+/// - last_modified 最後編輯日期( UNIX timestamp 秒 )
+/// - created_at 創建日期( UNIX timestamp 秒 )
 /// - children 子節點
 /// - symlink_target 符號連結的目標
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -19,8 +19,8 @@ pub struct FileNode {
     pub is_symlink: bool,
     pub extension: Option<String>,
     pub size: u64,
-    pub last_modified: Option<u64>,
-    pub created_at: Option<u64>,
+    pub last_modified: Option<i64>,
+    pub created_at: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<FileNode>>,
     #[serde(skip_serializing_if = "Option::is_none")]

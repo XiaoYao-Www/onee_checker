@@ -2,12 +2,13 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use console::style;
 use indicatif::{self, ProgressBar, ProgressStyle};
-use rayon::prelude::*;
+use rayon::{option, prelude::*};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::env;
-use std::io::{self};
-use std::path::{Path, PathBuf};
+use std::io::{self, Write, BufWriter};
+use std::path::{PathBuf};
 use std::sync::mpsc::channel;
+use std::fs::File;
 
 mod system;
 mod types;
@@ -123,6 +124,25 @@ enum Commands {
         #[arg(value_hint = clap::ValueHint::AnyPath)]
         path: PathBuf,
     },
+
+    /// 生成 Txt 紀錄檔
+    Txt {
+        /// 要記錄的路徑
+        #[arg(value_hint = clap::ValueHint::AnyPath)]
+        path: PathBuf,
+
+        /// 是否顯示檔案大小，並指定顯示格式
+        #[arg(short, long, value_enum)]
+        size_type: Option<system::Txt::TreeStringSizeType>,
+
+        /// 是否顯示最後修改時間
+        #[arg(short, long)]
+        modified: bool,
+
+        /// 是否顯示建立時間
+        #[arg(short, long)]
+        created: bool,
+    }
 }
 
 // ========== 主程式 ==========
@@ -268,6 +288,33 @@ fn main() -> io::Result<()> {
                 style("✔").green(),
                 output_path.display()
             );
+        },
+
+        Commands::Txt { path, size_type, modified, created } => {
+            if !path.exists() || !path.is_dir() {
+                eprintln!("{} 錯誤: 輸入路徑並非資料夾", style("✘").red());
+                return Ok(());
+            }
+
+            // 寫入檔案
+            let output_path: PathBuf = current_path.join(format!(
+                "{}.{}",
+                path.file_name().unwrap_or_default().to_string_lossy(),
+                "tree.txt"
+            ));
+
+            let file: File = File::create(output_path)?;
+            let mut writer: BufWriter<File> = BufWriter::new(file);
+
+            let option: system::Txt::TreeStringOption = system::Txt::TreeStringOption {
+                size: size_type,
+                created_at: created,
+                last_modified: modified,
+            };
+
+            system::Txt::write_tree_to(&mut writer, &path, &option)?;
+
+            writer.flush()?;
         }
     };
 

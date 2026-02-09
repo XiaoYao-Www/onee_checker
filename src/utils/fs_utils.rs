@@ -52,11 +52,16 @@ pub fn list_file(path: &Path) -> io::Result<Vec<PathBuf>> {
 }
 
 /// 輔助函數：將 SystemTime 轉為 Unix Timestamp
-fn to_unix_timestamp(time: Option<SystemTime>) -> Option<u64> {
-    time?
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .map(|d: Duration| d.as_secs())
+fn to_unix_timestamp(time: SystemTime) -> i64 {
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(dur) => {
+           dur.as_secs() as i64
+        }
+        Err(e) => {
+            let dur: Duration = e.duration();
+            -(dur.as_secs() as i64)
+        }
+    }
 }
 
 /// ### 創建檔案節點:遞迴調用
@@ -96,8 +101,8 @@ fn build_file_node_recursive(path: &Path) -> io::Result<FileNode> {
         .map(|ext: &OsStr| ext.to_string_lossy().to_lowercase());
 
     // 取得時間 (封裝成輔助函數)
-    let last_modified: Option<u64> = to_unix_timestamp(metadata.modified().ok());
-    let created_at: Option<u64> = to_unix_timestamp(metadata.created().ok());
+    let last_modified: Option<i64> = metadata.modified().ok().map(to_unix_timestamp);
+    let created_at: Option<i64> = metadata.created().ok().map(to_unix_timestamp);
 
     let mut children: Option<Vec<FileNode>> = None;
     let mut total_size: u64 = metadata.len();
