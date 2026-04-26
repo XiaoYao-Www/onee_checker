@@ -2,11 +2,10 @@
 use chrono::{Local, TimeZone};
 use clap::ValueEnum;
 // 1. 為了避免衝突，將 fmt::Write 改名或只在需要時局部引入
-use std::fmt::{self, Write as FmtWrite}; 
+use std::fmt::{Write as FmtWrite}; 
 // 2. 這是操作檔案必須的
 use std::io::{self, Write as IoWrite}; 
 use std::path::Path;
-use std::iter::Peekable;
 
 use crate::types::fs_types::FileNode;
 use crate::utils::FS::build_file_node;
@@ -89,7 +88,7 @@ pub fn format_unix_to_local(secs: i64) -> String {
             // %:z : 時區偏移 (例如 +08:00)
             dt.format("%Y-%m-%d %H:%M:%S %Z").to_string()
         }
-        chrono::LocalResult::Ambiguous(dt1, dt2) => {
+        chrono::LocalResult::Ambiguous(dt1, _dt2) => {
             // 極少數情況下（如日光節約時間調整）會有兩個可能時間
             dt1.format("%Y-%m-%d %H:%M:%S %Z").to_string()
         }
@@ -104,9 +103,14 @@ pub fn write_tree_to<W: IoWrite>(
     option: &TreeStringOption
 ) -> io::Result<()> {
     // 這裡 build_file_node 的邏輯不變
-    let root_node = build_file_node(path)?;
+    let root_node: FileNode = build_file_node(path)?;
     
-    let root_info = format_node_info(&root_node, option);
+    let root_info: String = format_node_info(&root_node, option);
+
+    writeln!(dest, "# ******************************")?;
+    writeln!(dest, "# Generation Time: {}", Local::now().format("%Y-%m-%d %H:%M:%S %z"))?;
+    writeln!(dest, "# ******************************")?;
+    writeln!(dest, "")?;
     
     // 當 W 是 io::Write 時，writeln! 會傳回 io::Result，
     // 這與你的函式回傳值類型相符，所以可以使用 ? 運算子。

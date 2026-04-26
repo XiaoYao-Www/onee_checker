@@ -2,13 +2,14 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use console::style;
 use indicatif::{self, ProgressBar, ProgressStyle};
-use rayon::{option, prelude::*};
+use rayon::{prelude::*};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::env;
 use std::io::{self, Write, BufWriter};
 use std::path::{PathBuf};
 use std::sync::mpsc::channel;
 use std::fs::File;
+use std::time::SystemTime;
 
 mod system;
 mod types;
@@ -274,6 +275,12 @@ fn main() -> io::Result<()> {
             // 取得 Node
             let nodes: types::FS::FileNode = utils::FS::build_file_node(&path)?;
 
+            let node_container: types::FS::FileNodeContainer = types::FS::FileNodeContainer {
+                version: String::from("0.0.1"),
+                generation_time: utils::FS::to_unix_timestamp(SystemTime::now()),
+                nodes: vec![nodes],
+            };
+
             // 寫入檔案
             let output_path: PathBuf = current_path.join(format!(
                 "{}.{}",
@@ -281,7 +288,7 @@ fn main() -> io::Result<()> {
                 "struct.json"
             ));
 
-            utils::FS::save_file_node_to_file(&nodes, &output_path)?;
+            utils::FS::save_file_node_to_file(&node_container, &output_path)?;
 
             println!(
                 "{} 結構紀錄已儲存在: {}",

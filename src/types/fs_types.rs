@@ -26,3 +26,11 @@ pub struct FileNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub symlink_target: Option<String>,
 }
+
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FileNodeContainer {
+    pub version: String,
+    pub generation_time: i64,
+    pub nodes: Vec<FileNode>,
+}

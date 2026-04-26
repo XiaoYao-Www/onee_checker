@@ -4,8 +4,9 @@ use std::fs::{self, DirEntry, File, FileType, Metadata, symlink_metadata};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use chrono::{Local};
 
-use crate::types::FS::FileNode;
+use crate::types::FS::{FileNode, FileNodeContainer};
 use crate::types::Hash::HashData;
 
 /// ### 列出所有檔案
@@ -52,7 +53,7 @@ pub fn list_file(path: &Path) -> io::Result<Vec<PathBuf>> {
 }
 
 /// 輔助函數：將 SystemTime 轉為 Unix Timestamp
-fn to_unix_timestamp(time: SystemTime) -> i64 {
+pub fn to_unix_timestamp(time: SystemTime) -> i64 {
     match time.duration_since(UNIX_EPOCH) {
         Ok(dur) => {
            dur.as_secs() as i64
@@ -172,7 +173,11 @@ pub fn save_hash_to_file(
     output_file: &Path,
     root_path: &Path,
 ) -> io::Result<()> {
-    let mut file: File = File::create(output_file)?;
+    let mut writer: BufWriter<File> = BufWriter::new(File::create(output_file)?);
+    writeln!(writer, "# ******************************")?;
+    writeln!(writer, "# Total Files Count: {}", data.len())?;
+    writeln!(writer, "# Generation Time: {}", Local::now().format("%Y-%m-%d %H:%M:%S %z"))?;
+    writeln!(writer, "# ******************************")?;
     for entry in data {
         let rel_path: &Path = entry
             .path
@@ -181,8 +186,9 @@ pub fn save_hash_to_file(
         // 轉換路徑分隔符為 /
         let path_str: String = rel_path.to_string_lossy().replace('\\', "/");
         // 寫入驗證資訊，使用 * 表示二進位模式
-        writeln!(file, "{} *{}", entry.hash_hex(), path_str)?;
+        writeln!(writer, "{} *{}", entry.hash_hex(), path_str)?;
     }
+    writer.flush()?;
     Ok(())
 }
 
@@ -209,14 +215,14 @@ pub fn validate_path(path: &Path) -> Result<(), String> {
 ///
 /// - node 節點根
 /// - output_path 儲存路徑
-pub fn save_file_node_to_file(node: &FileNode, output_path: &Path) -> io::Result<()> {
+pub fn save_file_node_to_file(node_container: &FileNodeContainer, output_path: &Path) -> io::Result<()> {
     let file: File = File::create(output_path)?;
 
     // 使用 BufWriter 提高大量寫入時的效能
     let writer: BufWriter<File> = BufWriter::new(file);
 
     // 序列化並寫入
-    serde_json::to_writer_pretty(writer, node)
+    serde_json::to_writer_pretty(writer, node_container)
         .map_err(|e: serde_json::Error| io::Error::new(io::ErrorKind::Other, e))?;
 
     Ok(())
