@@ -3,27 +3,6 @@
 version = 4
 
 [[package]]
-name = "Onee_Checker"
-version = "1.0.1"
-dependencies = [
- "blake2",
- "blake3",
- "chrono",
- "clap",
- "console",
- "hex",
- "indicatif",
- "md-5",
- "rayon",
- "serde",
- "serde_json",
- "sha-1",
- "sha2",
- "sha3",
- "walkdir",
-]
-
-[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -81,6 +60,12 @@ dependencies = [
  "once_cell_polyfill",
  "windows-sys",
 ]
+
+[[package]]
+name = "anyhow"
+version = "1.0.102"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "arrayref"
@@ -504,6 +489,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
+name = "onee_checker"
+version = "2.0.0"
+dependencies = [
+ "anyhow",
+ "blake2",
+ "blake3",
+ "chrono",
+ "clap",
+ "console",
+ "hex",
+ "indicatif",
+ "md-5",
+ "rayon",
+ "serde",
+ "serde_json",
+ "sha-1",
+ "sha2",
+ "sha3",
+ "thiserror",
+ "walkdir",
+]
+
+[[package]]
 name = "portable-atomic"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -664,6 +672,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
+dependencies = [
+ "thiserror-impl",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

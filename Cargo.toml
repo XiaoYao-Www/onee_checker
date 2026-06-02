@@ -1,21 +1,52 @@
+# Copyright (c) 2026 逍遙 (XiaoYao). Licensed under the MIT license.
+# SPDX-License-Identifier: MIT
+
 [package]
-name = "Onee_Checker"
-version = "1.0.1"
-edition = "2024"
+name = "onee_checker"
+version = "2.0.0"
+edition = "2021"
+description = "A professional hash verification & directory structure tool — library and CLI"
+authors = ["逍遙 (XiaoYao) <https://github.com/XiaoYao-Www>"]
+license = "MIT"
+repository = "https://github.com/XiaoYao-Www/onee_checker"
+readme = "README.md"
+keywords = ["hash", "checksum", "sha256", "blake3", "cli", "verification"]
+categories = ["command-line-utilities", "cryptography", "filesystem"]
+
+[[bin]]
+name = "oneechk"
+path = "src/main.rs"
 
 [dependencies]
-walkdir = "2.5.0"
+# CLI & UI
+clap = { version = "4.6.1", features = ["derive"] }
+indicatif = "0.18.4"
+console = "0.16.3"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Hash algorithms
+# sha2 v0.11 auto-detects SHA-NI at compile-time (pass RUSTFLAGS="-Ctarget-cpu=native" for best perf)
+# blake3 auto-detects SIMD (SSE4.1/AVX2/AVX-512) at runtime
 md-5 = "0.11.0"
 sha-1 = "0.10.1"
 sha2 = "0.11.0"
 sha3 = "0.11.0"
 blake2 = "0.10.6"
 blake3 = "1.8.5"
-hex = "0.4.3"
+
+# Serialization
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
-clap = { version = "4.6.1", features = ["derive"] }
-indicatif = "0.18.4"
+
+# Filesystem
+walkdir = "2.5.0"
+
+# Parallelism
 rayon = "1.12.0"
-console = "0.16.3"
+
+# Utilities
+hex = "0.4.3"
 chrono = "0.4.44"

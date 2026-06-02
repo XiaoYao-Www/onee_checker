@@ -1,329 +1,406 @@
-// 主程式，負責UI與輸入事件
-use clap::{Parser, Subcommand, ValueEnum};
-use console::style;
-use indicatif::{self, ProgressBar, ProgressStyle};
-use rayon::{prelude::*};
-use rayon::{ThreadPool, ThreadPoolBuilder};
+// Copyright (c) 2026 逍遙 (XiaoYao). Licensed under the MIT license.
+// SPDX-License-Identifier: MIT
+
+//! Onee Checker CLI — 薄調度層，業務邏輯全在 library。
+//!
+//! 設計原則：
+//! - stdout → 機器可解析的資料（hash 檔內容、JSON、純文字樹）
+//! - stderr → 人類可讀的訊息（進度、錯誤、狀態）
+//! - exit code → 0=成功 1=hash不匹配 2=I/O錯誤 3=使用者錯誤
+
 use std::env;
-use std::io::{self, Write, BufWriter};
-use std::path::{PathBuf};
-use std::sync::mpsc::channel;
 use std::fs::File;
-use std::time::SystemTime;
+use std::io::{BufWriter, Write, stdout};
+use std::path::Path;
+use std::path::PathBuf;
 
-mod system;
-mod types;
-mod utils;
+use console::style;
+use indicatif::{ProgressBar, ProgressStyle};
+use rayon::ThreadPoolBuilder;
 
-// ========== 類型定義 ==========
+use onee_checker::algorithm::{HashAlgo, HashData, HashType};
+use onee_checker::cli::{self, Cli, Commands, SizeType};
+use onee_checker::error::OneeError;
+use onee_checker::error::Result;
+use onee_checker::fs::{list_files, save_hash_file, validate_path, FileNodeContainer};
+use onee_checker::hash::compute_hashes_parallel;
+use onee_checker::hash::verify_hash_file;
+use onee_checker::tree::{write_tree, SizeFormat, TreeOption};
 
-/// ### 哈希算法
-#[derive(Clone, Debug, ValueEnum)]
-enum HashAlgo {
-    Md5,
-    Sha1,
-    Sha224,
-    Sha256,
-    Sha384,
-    Sha512,
-    Sha3256,
-    Sha3512,
-    Shake128Xof,
-    Shake256Xof,
-    Blake2s256,
-    Blake2b512,
-    Blake3,
-}
+fn main() {
+    let cli = <Cli as clap::Parser>::parse();
 
-impl HashAlgo {
-    /// ### 取得預設長度(bytes)
-    ///
-    /// 0 代表該類型無須考慮預設長度
-    fn default_length(&self) -> usize {
-        match self {
-            HashAlgo::Shake128Xof => 32,
-            HashAlgo::Shake256Xof => 64,
-            HashAlgo::Blake3 => 32,
-            _ => 0,
-        }
-    }
+    let result = match cli.command {
+        Commands::Hash(args) => cmd_hash(args),
+        Commands::Verify(args) => cmd_verify(args),
+        Commands::Json(args) => cmd_json(args),
+        Commands::Txt(args) => cmd_txt(args),
+    };
 
-    /// ### 是否允許自訂長度
-    fn can_specify_length(&self) -> bool {
-        match self {
-            HashAlgo::Shake128Xof | HashAlgo::Shake256Xof | HashAlgo::Blake3 => true,
-            _ => false,
-        }
-    }
-
-    // ### 取得對應的 Hasher
-    fn get_hasher(&self, len: usize) -> types::Hash::HashType {
-        match self {
-            HashAlgo::Md5 => types::Hash::HashType::MD5,
-            HashAlgo::Sha1 => types::Hash::HashType::SHA1,
-            HashAlgo::Sha224 => types::Hash::HashType::SHA224,
-            HashAlgo::Sha256 => types::Hash::HashType::SHA256,
-            HashAlgo::Sha384 => types::Hash::HashType::SHA384,
-            HashAlgo::Sha512 => types::Hash::HashType::SHA512,
-            HashAlgo::Sha3256 => types::Hash::HashType::SHA3_256,
-            HashAlgo::Sha3512 => types::Hash::HashType::SHA3_512,
-            HashAlgo::Shake128Xof => types::Hash::HashType::SHAKE128(len),
-            HashAlgo::Shake256Xof => types::Hash::HashType::SHAKE256(len),
-            HashAlgo::Blake2s256 => types::Hash::HashType::BLAKE2S256,
-            HashAlgo::Blake2b512 => types::Hash::HashType::BLAKE2B512,
-            HashAlgo::Blake3 => types::Hash::HashType::BLAKE3(len),
-        }
+    if let Err(err) = result {
+        eprintln!("{} {}", style("✘").red(), err);
+        std::process::exit(err.exit_code());
     }
 }
 
-// ========== 命令設定 ==========
+// ──────────────────────────────────────────────────────────
+//  hash 子命令
+// ──────────────────────────────────────────────────────────
 
-#[derive(Parser)]
-#[command(
-    name = "oneechk",
-    author = "逍遙 https://github.com/XiaoYao-Www",
-    arg_required_else_help = true,
-    subcommand_required = true
-)]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
+fn cmd_hash(args: cli::HashArgs) -> Result<()> {
+    let path = &args.path;
 
-#[derive(Subcommand)]
-enum Commands {
-    /// 生成哈希驗證檔
-    Hash {
-        /// 要較驗的路徑
-        #[arg(value_hint = clap::ValueHint::AnyPath)]
-        path: PathBuf,
+    validate_path(path).map_err(|e| OneeError::InvalidPath(e))?;
 
-        /// 算法 ( 可多選 )
-        #[arg(short, long, value_enum)]
-        algo: HashAlgo,
-
-        /// 哈希驗證長度
-        #[arg(long, help = "哈希較驗長度(bytes)，未指定的話使用預設值。")]
-        length: Option<usize>,
-
-        /// 進度條顯示
-        #[arg(short, long, help = "進度條顯示與否")]
-        progress: bool,
-
-        /// 線程數
-        #[arg(long, help = "允許線程數量")]
-        thread: Option<usize>,
-
-        /// buffer 大小
-        #[arg(long, help = "算法緩存大小(KB)，預設 1 MB")]
-        buffer: Option<usize>,
-    },
-
-    /// 生成 Json 結構紀錄檔
-    Json {
-        /// 要記錄的路徑
-        #[arg(value_hint = clap::ValueHint::AnyPath)]
-        path: PathBuf,
-    },
-
-    /// 生成 Txt 紀錄檔
-    Txt {
-        /// 要記錄的路徑
-        #[arg(value_hint = clap::ValueHint::AnyPath)]
-        path: PathBuf,
-
-        /// 是否顯示檔案大小，並指定顯示格式
-        #[arg(short, long, value_enum)]
-        size_type: Option<system::Txt::TreeStringSizeType>,
-
-        /// 是否顯示最後修改時間
-        #[arg(short, long)]
-        modified: bool,
-
-        /// 是否顯示建立時間
-        #[arg(short, long)]
-        created: bool,
-    }
-}
-
-// ========== 主程式 ==========
-
-fn main() -> io::Result<()> {
-    let cli: Cli = Cli::parse();
-    let current_path: PathBuf = env::current_dir()?;
-
-    match cli.command {
-        Commands::Hash {
-            path,
-            algo,
-            length,
-            progress,
-            thread,
-            buffer,
-        } => {
-            // 驗證路徑
-            if let Err(info) = utils::FS::validate_path(&path) {
-                eprintln!("{} 錯誤: {}", style("✘").red(), info);
-                return Ok(());
-            }
-
-            // 驗證長度輸入設定
-            if !algo.can_specify_length() && length.is_some() {
-                eprintln!("{} 錯誤: 算法 {:?} 無法指定長度", style("✘").red(), algo);
-                return Ok(());
-            }
-
-            // 取得對應的 Hasher
-            let hash_type: types::Hash::HashType =
-                algo.get_hasher(length.unwrap_or(algo.default_length()));
-
-            // 創建通訊器
-            let (tx, rx) = channel();
-
-            // 創建線程池
-            let pool: ThreadPool = ThreadPoolBuilder::new()
-                .num_threads(thread.unwrap_or(1))
-                .build()
-                .unwrap();
-
-            // 抓取所有檔案路徑
-            let file_paths: Vec<PathBuf> = utils::FS::list_file(&path)?;
-
-            // 創建進度條
-            let progress_bar: Option<ProgressBar> = progress.then(|| {
-                let pb: ProgressBar = ProgressBar::new(file_paths.len() as u64);
-                pb.set_style(
-                    ProgressStyle::default_bar()
-                        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
-                        .unwrap()
-                        .progress_chars("#>-")
-                );
-                pb
-            });
-
-            // 添加任務
-            pool.spawn(move || {
-                file_paths
-                    .par_iter() // 在當前pool創建任務
-                    .map_init(
-                        || vec![0u8; buffer.unwrap_or(1024) * 1024], // 1 MB
-                        |buf: &mut Vec<u8>, path: &PathBuf| {
-                            system::Hash::compute_file_hash(path, &hash_type, buf).map(|data| {
-                                types::Hash::HashData {
-                                    path: path.to_path_buf(),
-                                    hash_type: hash_type.clone(),
-                                    hash_bytes: data,
-                                }
-                            })
-                        },
-                    )
-                    .for_each(|result| {
-                        tx.send(result).ok();
+    // 如果沒有指定 algo，預設使用 SHA-256
+    let algos: Vec<(HashAlgo, HashType)> = if args.algo.is_empty() {
+        vec![(HashAlgo::Sha256, HashType::SHA256)]
+    } else {
+        if args.length.is_some() {
+            for algo in &args.algo {
+                if !algo.can_specify_length() {
+                    return Err(OneeError::UnsupportedLength {
+                        algorithm: format!("{:?}", algo),
                     });
-            });
-
-            // 回收結果
-            let mut hash_result: Vec<types::Hash::HashData> = vec![];
-
-            for result in rx {
-                match result {
-                    Ok(data) => {
-                        hash_result.push(data);
-                    }
-                    Err(e) => {
-                        eprintln!("{} 錯誤: {:?}", style("✘").red(), e);
-                    }
-                };
-                if let Some(bar) = progress_bar.as_ref() {
-                    bar.inc(1);
-                };
+                }
             }
+        }
+        args.algo
+            .iter()
+            .map(|a: &HashAlgo| {
+                a.to_hash_type(args.length)
+                    .map(|ht: HashType| (a.clone(), ht))
+            })
+            .collect::<Result<Vec<(HashAlgo, HashType)>>>()?
+    };
 
-            if let Some(bar) = progress_bar {
-                bar.finish_and_clear();
-                println!("{} 哈希計算完成", style("✔").green());
-            }
+    // 設定線程池
+    if let Some(n) = args.threads {
+        ThreadPoolBuilder::new()
+            .num_threads(n)
+            .build_global()
+            .map_err(|e| OneeError::ArgumentError(format!("線程池設定失敗: {e}")))?;
+    }
 
-            // 寫入檔案
-            let output_path: PathBuf = current_path.join(format!(
-                "{}.{}",
-                path.file_name().unwrap_or_default().to_string_lossy(),
-                utils::Hash::hash_suffix(&hash_type)
-            ));
-            hash_result.sort_by(|a: &types::Hash::HashData, b: &types::Hash::HashData| {
-                a.path.cmp(&b.path)
-            });
-            utils::FS::save_hash_to_file(
-                &hash_result,
-                &output_path,
-                path.parent().unwrap_or(&current_path),
-            )?;
+    // 收集檔案
+    let files = list_files(path)?;
+    if files.is_empty() {
+        eprintln!("{} 警告: 指定路徑下無任何檔案", style("⚠").yellow());
+        return Ok(());
+    }
 
-            println!(
-                "{} 哈希已儲存在: {}",
-                style("✔").green(),
-                output_path.display()
-            );
+    let buffer_size = args.buffer.0;
+
+    for (i, (_, hash_type)) in algos.iter().enumerate() {
+        if !args.quiet && algos.len() > 1 {
+            eprintln!("[{}/{}] 計算 {}...", i + 1, algos.len(), hash_type.display_name());
         }
 
-        Commands::Json { path } => {
-            if !path.exists() || !path.is_dir() {
-                eprintln!("{} 錯誤: 輸入路徑並非資料夾", style("✘").red());
-                return Ok(());
-            }
-
-            // 取得 Node
-            let nodes: types::FS::FileNode = utils::FS::build_file_node(&path)?;
-
-            let node_container: types::FS::FileNodeContainer = types::FS::FileNodeContainer {
-                version: String::from("0.0.1"),
-                generation_time: utils::FS::to_unix_timestamp(SystemTime::now()),
-                nodes: vec![nodes],
-            };
-
-            // 寫入檔案
-            let output_path: PathBuf = current_path.join(format!(
-                "{}.{}",
-                path.file_name().unwrap_or_default().to_string_lossy(),
-                "struct.json"
-            ));
-
-            utils::FS::save_file_node_to_file(&node_container, &output_path)?;
-
-            println!(
-                "{} 結構紀錄已儲存在: {}",
-                style("✔").green(),
-                output_path.display()
+        // 進度條
+        let pb: Option<ProgressBar> = if !args.quiet {
+            let bar = ProgressBar::new(files.len() as u64);
+            bar.set_style(
+                ProgressStyle::default_bar()
+                    .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+                    .unwrap()
+                    .progress_chars("#>-"),
             );
-        },
+            Some(bar)
+        } else {
+            None
+        };
 
-        Commands::Txt { path, size_type, modified, created } => {
-            if !path.exists() || !path.is_dir() {
-                eprintln!("{} 錯誤: 輸入路徑並非資料夾", style("✘").red());
-                return Ok(());
+        // 並行計算
+        let results = compute_hashes_parallel(&files, hash_type, buffer_size);
+        let mut hash_data: Vec<HashData> = Vec::with_capacity(results.len());
+
+        for result in results {
+            match result {
+                Ok(data) => {
+                    hash_data.push(data);
+                }
+                Err(e) => {
+                    eprintln!("{} 錯誤: {e}", style("✘").red());
+                }
             }
+            if let Some(ref bar) = pb {
+                bar.inc(1);
+            }
+        }
 
-            // 寫入檔案
-            let output_path: PathBuf = current_path.join(format!(
-                "{}.{}",
-                path.file_name().unwrap_or_default().to_string_lossy(),
-                "tree.txt"
-            ));
+        if let Some(bar) = pb {
+            bar.finish_and_clear();
+        }
 
-            let file: File = File::create(output_path)?;
-            let mut writer: BufWriter<File> = BufWriter::new(file);
+        // 排序
+        hash_data.sort_by(|a, b| a.path.cmp(&b.path));
 
-            let option: system::Txt::TreeStringOption = system::Txt::TreeStringOption {
-                size: size_type,
-                created_at: created,
-                last_modified: modified,
-            };
+        // 決定輸出
+        let current_dir = env::current_dir().map_err(OneeError::Io)?;
+        let default_name = format!(
+            "{}.{}",
+            path.file_name().unwrap_or_default().to_string_lossy(),
+            hash_type.suffix()
+        );
 
-            system::Txt::write_tree_to(&mut writer, &path, &option)?;
+        match &args.output {
+            Some(out) if out.to_string_lossy() == "-" => {
+                write_hash_to_stdout(&hash_data, path, &current_dir)?;
+            }
+            Some(out) => {
+                let out_path: &Path = out.as_path();
+                save_hash_file(&hash_data, out_path, path.parent().unwrap_or(&current_dir))?;
+                eprintln!("{} 已儲存: {}", style("✔").green(), out.display());
+            }
+            None => {
+                let output_path = current_dir.join(&default_name);
+                save_hash_file(&hash_data, &output_path, path.parent().unwrap_or(&current_dir))?;
+                eprintln!("{} 已儲存: {}", style("✔").green(), output_path.display());
+            }
+        }
+    }
 
-            writer.flush()?;
+    Ok(())
+}
+
+/// 將 hash 結果寫入 stdout
+fn write_hash_to_stdout(data: &[HashData], input_path: &Path, current_dir: &Path) -> Result<()> {
+    let mut stdout = BufWriter::new(stdout().lock());
+    let root = input_path.parent().unwrap_or(current_dir);
+    for entry in data {
+        let rel_path = entry.path.strip_prefix(root).unwrap_or(&entry.path);
+        let path_str = rel_path.to_string_lossy().replace('\\', "/");
+        writeln!(stdout, "{} *{}", entry.hash_hex(), path_str)
+            .map_err(OneeError::Io)?;
+    }
+    stdout.flush().map_err(OneeError::Io)?;
+    Ok(())
+}
+
+// ──────────────────────────────────────────────────────────
+//  verify 子命令
+// ──────────────────────────────────────────────────────────
+
+fn cmd_verify(args: cli::VerifyArgs) -> Result<()> {
+    let hashfile = &args.hashfile;
+
+    if !hashfile.exists() || !hashfile.is_file() {
+        return Err(OneeError::InvalidPath(format!(
+            "Hash 檔不存在: {}",
+            hashfile.display()
+        )));
+    }
+
+    // 從副檔名推斷演算法
+    let hash_type = match &args.algo {
+        Some(algo) => algo.to_hash_type(None)?,
+        None => {
+            let ext = hashfile
+                .extension()
+                .map(|e| e.to_string_lossy().to_lowercase())
+                .ok_or_else(|| {
+                    OneeError::ArgumentError("無法從副檔名推斷演算法，請使用 --algo 手動指定".into())
+                })?;
+            let algo = HashAlgo::from_suffix(&ext).ok_or_else(|| {
+                OneeError::UnsupportedAlgorithm(format!("無法從副檔名 .{ext} 推斷演算法"))
+            })?;
+            algo.to_hash_type(None)?
         }
     };
+
+    let root_dir: PathBuf = args.root.unwrap_or_else(|| {
+        let parent = hashfile.parent().unwrap_or(Path::new("."));
+        if parent.as_os_str().is_empty() {
+            PathBuf::from(".")
+        } else {
+            parent.to_path_buf()
+        }
+    });
+
+    if !args.quiet {
+        eprintln!(
+            "{} 驗證 {} （演算法: {} 根目錄: {}）",
+            style("ℹ").cyan(),
+            hashfile.display(),
+            hash_type.display_name(),
+            root_dir.display()
+        );
+    }
+
+    let buffer_size = args.buffer.0;
+
+    if let Some(n) = args.threads {
+        ThreadPoolBuilder::new()
+            .num_threads(n)
+            .build_global()
+            .map_err(|e| OneeError::ArgumentError(format!("線程池設定失敗: {e}")))?;
+    }
+
+    let results = verify_hash_file(hashfile, &hash_type, &root_dir, buffer_size);
+
+    let mut total = 0usize;
+    let mut matched = 0usize;
+    let mut mismatched = 0usize;
+    let mut errors = 0usize;
+
+    for result in &results {
+        total += 1;
+        match result {
+            Ok((path, true, _)) => {
+                matched += 1;
+                if !args.quiet {
+                    eprintln!("{} {}", style("✔").green(), path.display());
+                }
+            }
+            Ok((path, false, actual)) => {
+                mismatched += 1;
+                eprintln!(
+                    "{} {}  預期 hash 不匹配 (實際: {actual})",
+                    style("✘").red(),
+                    path.display()
+                );
+            }
+            Err(e) => {
+                errors += 1;
+                eprintln!("{} 錯誤: {e}", style("✘").red());
+            }
+        }
+    }
+
+    eprintln!(
+        "{} 驗證完成: {total} 個檔案, {matched} 匹配, {mismatched} 不匹配, {errors} 錯誤",
+        if mismatched == 0 && errors == 0 {
+            style("✔").green()
+        } else {
+            style("✘").red()
+        }
+    );
+
+    if mismatched > 0 {
+        return Err(OneeError::HashMismatch {
+            path: hashfile.clone(),
+            expected: format!("{mismatched} 個檔案不匹配"),
+            actual: "見上方錯誤列表".into(),
+        });
+    }
+
+    Ok(())
+}
+
+// ──────────────────────────────────────────────────────────
+//  json 子命令
+// ──────────────────────────────────────────────────────────
+
+fn cmd_json(args: cli::JsonArgs) -> Result<()> {
+    let path = &args.path;
+
+    if !path.exists() || !path.is_dir() {
+        return Err(OneeError::InvalidPath(format!(
+            "路徑不存在或不是目錄: {}",
+            path.display()
+        )));
+    }
+
+    if !args.quiet {
+        eprintln!("{} 掃描目錄結構: {}", style("ℹ").cyan(), path.display());
+    }
+
+    use std::time::SystemTime;
+    use onee_checker::fs::{build_file_node, save_file_node_json};
+
+    let node = build_file_node(path)?;
+    let container = FileNodeContainer {
+        version: String::from("0.1.0"),
+        generation_time: onee_checker::fs::to_unix_timestamp(SystemTime::now()),
+        nodes: vec![node],
+    };
+
+    let current_dir = env::current_dir().map_err(OneeError::Io)?;
+    let default_name = format!(
+        "{}.{}",
+        path.file_name().unwrap_or_default().to_string_lossy(),
+        "struct.json"
+    );
+
+    match &args.output {
+        Some(out) if out.to_string_lossy() == "-" => {
+            serde_json::to_writer_pretty(stdout().lock(), &container)
+                .map_err(OneeError::Serde)?;
+        }
+        Some(out) => {
+            save_file_node_json(&container, out.as_path())?;
+            if !args.quiet {
+                eprintln!("{} 已儲存: {}", style("✔").green(), out.display());
+            }
+        }
+        None => {
+            let output_path = current_dir.join(&default_name);
+            save_file_node_json(&container, &output_path)?;
+            if !args.quiet {
+                eprintln!("{} 已儲存: {}", style("✔").green(), output_path.display());
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// ──────────────────────────────────────────────────────────
+//  txt 子命令
+// ──────────────────────────────────────────────────────────
+
+fn cmd_txt(args: cli::TxtArgs) -> Result<()> {
+    let path = &args.path;
+
+    if !path.exists() || !path.is_dir() {
+        return Err(OneeError::InvalidPath(format!(
+            "路徑不存在或不是目錄: {}",
+            path.display()
+        )));
+    }
+
+    let size_format = args.size.map(|st| match st {
+        SizeType::Binary => SizeFormat::Binary,
+        SizeType::Decimal => SizeFormat::Decimal,
+        SizeType::Raw => SizeFormat::Raw,
+    });
+
+    let option = TreeOption {
+        size: size_format,
+        last_modified: args.modified,
+        created_at: args.created,
+    };
+
+    let current_dir = env::current_dir().map_err(OneeError::Io)?;
+    let default_name = format!(
+        "{}.{}",
+        path.file_name().unwrap_or_default().to_string_lossy(),
+        "tree.txt"
+    );
+
+    match &args.output {
+        Some(out) if out.to_string_lossy() == "-" => {
+            let mut stdout = stdout().lock();
+            write_tree(&mut stdout, path, &option)?;
+        }
+        Some(out) => {
+            let file = File::create(out.as_path())?;
+            let mut writer = BufWriter::new(file);
+            write_tree(&mut writer, path, &option)?;
+            if !args.quiet {
+                eprintln!("{} 已儲存: {}", style("✔").green(), out.display());
+            }
+        }
+        None => {
+            let output_path = current_dir.join(&default_name);
+            let file = File::create(&output_path)?;
+            let mut writer = BufWriter::new(file);
+            write_tree(&mut writer, path, &option)?;
+            if !args.quiet {
+                eprintln!("{} 已儲存: {}", style("✔").green(), output_path.display());
+            }
+        }
+    }
 
     Ok(())
 }

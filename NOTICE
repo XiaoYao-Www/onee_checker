@@ -1,0 +1,37 @@
+# NOTICE — Trademark & Attribution
+
+## Trademark
+
+The names **"Onee Checker"**, **"oneechk"**, and the project logo (if any) are trademarks
+of the project author (逍遙 / XiaoYao). The MIT License does not grant any rights to use
+these trademarks. You may not use these names for any derivative works, forks, or
+redistributions without prior written permission from the trademark holder.
+
+If you fork or modify this software, you MUST rename the project and binary to avoid
+confusion with the original "Onee Checker".
+
+## Third-Party Notices
+
+This project uses the following open-source libraries. See `doc/LICENSE-AUDIT.md`
+for a complete list with license details.
+
+### RustCrypto Hashes (https://github.com/RustCrypto)
+
+Copyright (c) 2016-2026 RustCrypto Developers
+
+The following crates are dual-licensed under MIT OR Apache-2.0:
+- md-5
+- sha-1
+- sha2
+- sha3
+- blake2
+
+### BLAKE3 (https://github.com/BLAKE3-team/BLAKE3)
+
+Copyright (c) 2019-2026 Jack O'Connor and contributors
+
+Dual-licensed under CC0-1.0 OR Apache-2.0.
+
+### Other Dependencies
+
+See `doc/LICENSE-AUDIT.md` for the full dependency license audit.
