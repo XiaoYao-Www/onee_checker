@@ -1,14 +1,15 @@
 # Copyright (c) 2026 逍遙 (XiaoYao). Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
+#
+# cargo-deny 設定檔
+# 參考：https://embarkstudios.github.io/cargo-deny/
 
 [advisories]
-vulnerability = "deny"
-unmaintained = "all"
-yanked = "warn"
-notice = "all"
+version = 2
 ignore = []
 
 [licenses]
+version = 2
 allow = [
     "MIT",
     "Apache-2.0",
@@ -20,8 +21,6 @@ allow = [
     "Unlicense",
     "Zlib",
 ]
-deny = []
-copyleft = "deny"
 
 [bans]
 multiple-versions = "warn"
