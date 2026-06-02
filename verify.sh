@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 #
+# Copyright (c) 2026 逍遙 (XiaoYao). Licensed under the MIT license.
+# SPDX-License-Identifier: MIT
+#
 # Onee Checker — 標準化驗證流程
 #
 # 使用方式：

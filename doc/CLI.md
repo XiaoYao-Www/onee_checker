@@ -1,6 +1,6 @@
 # Onee Checker 指令參考手冊 (CLI)
 
-**版本**: 2.0.0  
+**版本**: 2.0.1  
 **二進位名稱**: `oneechk`
 
 ---
@@ -280,7 +280,47 @@ oneechk json /data -o - -q | jq '.nodes[0].children | length'
 
 ---
 
-## 6. 進階用法
+## 6. 效能調校
+
+### 多演算法單次 I/O（v2.0.1 新增）
+
+當指定多個 `-a` 參數（如 `-a sha256 -a blake3`）時，Onee Checker **自動啟用單次 I/O 優化**：
+
+- **一次 `File::open` + 一次 read loop**，同時更新所有 hasher
+- 相比逐個演算法計算，I/O 量從 N 倍降為 1 倍
+- 對於 HDD 和大量小檔案的場景效益最顯著
+
+```bash
+# 這兩條指令的 I/O 量差異：
+oneechk hash /data -a sha256 -a blake3        # 單次 I/O（v2.1）
+cargo run --release -- hash /data -a sha256 && \
+  cargo run --release -- hash /data -a blake3  # 兩次 I/O（舊版行為）
+```
+
+### BLAKE3 大檔案多線程（v2.0.1 新增）
+
+BLAKE3 對 256 MiB ~ 1 GiB 之間的檔案自動啟用內部多線程樹狀 hash：
+
+| 檔案大小 | 模式 | 說明 |
+|----------|------|------|
+| < 256 MiB | 串流 `update()` | 單線程 SIMD 加速，記憶體 O(1) |
+| 256 MiB ~ 1 GiB | 多線程 `blake3::hash()` | 一次載入 + 樹狀 hash，3-8x 加速 |
+| > 1 GiB | 串流 `update()` | 避免 OOM，降級回單線程 |
+
+### 儲存裝置調校
+
+```bash
+# SSD / NVMe：高並行、大 buffer
+oneechk hash /ssd/data --buffer 4M -t 8
+
+# HDD：減少線程避免磁頭 thrashing
+oneechk hash /hdd/data --buffer 64K -t 2
+
+# 大量小檔案（< 64K）：最小 buffer、高並行
+oneechk hash /many-small-files --buffer 512B -t 16
+```
+
+## 7. 進階用法
 
 ### CI/CD 管線中的完整性驗證
 

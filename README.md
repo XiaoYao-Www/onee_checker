@@ -11,7 +11,7 @@
 
 **Onee Checker** (`oneechk`) — 專業 hash 驗證與目錄結構工具。
 
-提供 14 種密碼學雜湊演算法（MD5, SHA-1/2/3, SHAKE-128/256, BLAKE2s/b, BLAKE3），支援多線程並行計算、目錄結構 JSON/txt 輸出、以及 `shasum` 相容格式的 hash 驗證。
+提供 14 種密碼學雜湊演算法（MD5, SHA-1/2/3, SHAKE-128/256, BLAKE2s/b, BLAKE3），支援多線程並行計算、**多演算法單次 I/O**、BLAKE3 大檔案多線程加速、目錄結構 JSON/txt 輸出、以及 `shasum` 相容格式的 hash 驗證。
 
 可作為 **CLI 工具** 由其他程式／腳本調用，也可作為 **Rust library** 嵌入其他專案。
 
@@ -40,6 +40,9 @@ oneechk hash /path/to/directory -a sha256 -a blake3 -a md5
 
 # 驗證 hash 檔
 oneechk verify directory.sha256
+
+# 多演算法單次掃描（只讀一次磁碟）
+oneechk hash /path/to/directory -a sha256 -a blake3 -a md5
 
 # 生成 JSON 目錄結構
 oneechk json /path/to/directory

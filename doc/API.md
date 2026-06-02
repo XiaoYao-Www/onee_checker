@@ -141,6 +141,56 @@ pub fn verify_file_hash(
 
 驗證單一檔案 hash 是否匹配預期值。
 
+### `compute_multi_hashes_parallel`（v2.0.1 新增）
+
+```rust
+pub fn compute_multi_hashes_parallel(
+    files: &[PathBuf],
+    hash_types: &[HashType],
+    buffer_size: usize,
+) -> Vec<Vec<Result<HashData, OneeError>>>
+```
+
+**單次 I/O 多演算法並行計算**。讀取每個檔案一次，同時更新多個 hasher。
+
+- **輸入**：檔案列表、演算法列表（2+）、buffer 大小
+- **輸出**：`Vec<Vec<Result<...>>>` — 外層 per-algorithm，內層 per-file
+- 當 `hash_types.len() == 1` 時等同 `compute_hashes_parallel`
+
+**使用時機**：需要同時計算多種 hash 時，取代逐個呼叫 `compute_hashes_parallel`。
+
+```rust
+use onee_checker::prelude::*;
+
+let files = list_files(Path::new("/data"))?;
+let results = compute_multi_hashes_parallel(
+    &files,
+    &[HashType::SHA256, HashType::BLAKE3(32)],
+    1024 * 1024,
+);
+
+// results[0] = SHA256 結果
+// results[1] = BLAKE3 結果
+for result in &results[0] {
+    if let Ok(data) = result {
+        println!("SHA256: {} = {}", data.path.display(), data.hash_hex());
+    }
+}
+```
+
+### `compute_multi_hashes_parallel_with_pool`
+
+與 `compute_multi_hashes_parallel` 相同，但使用指定的 `rayon::ThreadPool`。
+
+```rust
+pub fn compute_multi_hashes_parallel_with_pool(
+    pool: &ThreadPool,
+    files: &[PathBuf],
+    hash_types: &[HashType],
+    buffer_size: usize,
+) -> Vec<Vec<Result<HashData, OneeError>>>
+```
+
 ### `verify_hash_file`
 
 ```rust
@@ -193,6 +243,25 @@ Blake3Hasher
 ```
 
 所有類型均實作 `Clone`、`Send`、`Sync`。每個類型提供 `new()`、`update(&mut self, data: &[u8])`、`finish(self) -> Vec<u8>`。
+
+### `blake3_hash_bulk`（v2.0.1 新增）
+
+```rust
+pub fn blake3_hash_bulk(data: &[u8], out_len: u16) -> Vec<u8>
+```
+
+對整個 buffer 計算 BLAKE3 hash。當 `out_len == 32`（預設長度）時使用 `blake3::hash()` 內部多線程樹狀 hash。
+自訂長度時使用串流模式。
+
+```rust
+use onee_checker::hasher::blake3_hash_bulk;
+
+// 多線程：32 bytes 輸出，使用 blake3::hash() 內部並行
+let hash = blake3_hash_bulk(&large_file_data, 32);
+
+// 串流：64 bytes 輸出，走 update() + finalize_xof()
+let hash = blake3_hash_bulk(&data, 64);
+```
 
 ---
 

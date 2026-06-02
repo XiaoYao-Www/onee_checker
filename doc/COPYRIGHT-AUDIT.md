@@ -1,8 +1,8 @@
 # 版權合規審計報告
 
-**專案**: onee_checker v2.0.0  
+**專案**: onee_checker v2.0.1  
 **審計日期**: 2026-06-02  
-**執行者**: cli-systems-engineer (automated)  
+**執行者**: license-compliance-advisor (automated)  
 
 ---
 
@@ -45,7 +45,7 @@ categories = ["command-line-utilities", "cryptography", "filesystem"]
 
 ## 2. 原始碼版權標頭 — ✅ PASS
 
-所有 24 個 `.rs` 檔案均包含以下版權標頭：
+所有 24 個 `.rs` 原始碼檔案及 1 個整合測試檔 (`tests/cli_integration.rs`) 均包含以下版權標頭：
 
 ```rust
 // Copyright (c) 2026 逍遙 (XiaoYao). Licensed under the MIT license.
@@ -58,6 +58,8 @@ categories = ["command-line-utilities", "cryptography", "filesystem"]
 | `src/cli/` | 5 (mod, hash_cmd, verify_cmd, json_cmd, txt_cmd) | ✅ |
 | `src/fs/` | 5 (mod, node, walker, writer, path_safe) | ✅ |
 | `src/hasher/` | 8 (mod, enum_hasher, md5, sha1, sha2, sha3, blake2, blake3) | ✅ |
+| `tests/` | 1 (cli_integration.rs) | ✅ |
+| `benches/` | 1 (hash_benchmark.rs) | ✅ |
 
 ---
 
@@ -67,9 +69,10 @@ categories = ["command-line-utilities", "cryptography", "filesystem"]
 
 | 依賴數量 | 授權類型 | MIT 相容 |
 |---|---|---|
-| 14 | MIT OR Apache-2.0 | ✅ |
+| 17 | MIT OR Apache-2.0 | ✅ |
 | 2 | MIT | ✅ |
-| 1 | CC0-1.0 OR Apache-2.0 (blake3) | ✅ |
+| 1 | CC0-1.0 OR Apache-2.0 (blake3, `rayon` feature) | ✅ |
+| 1 | MIT OR Unlicense (walkdir) | ✅ |
 
 ### 署名狀態
 
@@ -139,7 +142,7 @@ categories = ["command-line-utilities", "cryptography", "filesystem"]
 |---|---|
 | 🟢 低 | 為 `Onee Checker` 名稱註冊商標（如計劃商業化） |
 | 🟢 低 | 取代 TEST/ 目錄內容為無版權測試資料 |
-| 🟢 低 | 在 CI/CD pipeline 中添加 `cargo-deny` 或 `cargo-license` 自動掃描 |
+| 🟢 低 | 在 CI/CD pipeline 中添加 `cargo-deny` 或 `cargo-license` 自動掃描（目前 `verify.sh` 含手動檢測） |
 
 ---
 

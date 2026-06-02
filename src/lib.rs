@@ -15,9 +15,17 @@
 //! let mut buf = vec![0u8; 64 * 1024];
 //! let hash = compute_file_hash(Path::new("/path/to/file"), &HashType::SHA256, &mut buf)?;
 //!
-//! // 並行掃描整個目錄
+//! // 並行掃描整個目錄（單一演算法）
 //! let files = list_files(Path::new("/some/dir"))?;
 //! let results = compute_hashes_parallel(&files, &HashType::SHA256, 64 * 1024);
+//!
+//! // 並行掃描整個目錄（多演算法，單次 I/O）
+//! let multi_results = compute_multi_hashes_parallel(
+//!     &files,
+//!     &[HashType::SHA256, HashType::BLAKE3(32)],
+//!     64 * 1024,
+//! );
+//! // multi_results[0] = SHA256, multi_results[1] = BLAKE3
 //! ```
 
 pub mod algorithm;

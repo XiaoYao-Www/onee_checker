@@ -1,12 +1,12 @@
 # 依賴授權審計報告
 
-**專案**: onee_checker v2.0.0  
+**專案**: onee_checker v2.0.1  
 **專案授權**: MIT (with trademark retention)  
 **審計日期**: 2026-06-02  
 
 ---
 
-## 直接依賴 (17)
+## 直接依賴 (21)
 
 | 依賴 | 版本 | 授權 | SPDX | 與 MIT 相容 | 需署名 | 處理方式 |
 |---|---|---|---|---|---|---|
@@ -27,15 +27,22 @@
 | **rayon** | 1.12.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
 | **hex** | 0.4.3 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
 | **chrono** | 0.4.44 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **criterion** Ⓓ | 0.5.1 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 僅 dev-dependency，不影響散佈 |
+| **assert_cmd** Ⓓ | 2.2.2 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 僅 dev-dependency，不影響散佈 |
+| **predicates** Ⓓ | 3.1.4 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 僅 dev-dependency |
+| **tempfile** Ⓓ | 3.27.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 僅 dev-dependency |
+
+> Ⓓ = dev-dependency，僅在測試/基準時使用，不納入最終二進位
 
 ---
 
 ## 授權分布圖
 
 ```
-MIT OR Apache-2.0  ████████████████  14 (82%)
-CC0-1.0            ██                 1  (6%)
-MIT                ██                 2 (12%)
+MIT OR Apache-2.0  ██████████████████  17 (81%)
+CC0-1.0            █                   1  (5%)
+MIT                ██                  2 (9%)
+MIT OR Unlicense   ▏                   1  (5%)
 ```
 
 ---
