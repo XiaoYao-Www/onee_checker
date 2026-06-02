@@ -4,14 +4,14 @@
 //! CLI 參數定義 — 使用 clap derive。
 
 mod hash_cmd;
-mod verify_cmd;
 mod json_cmd;
 mod txt_cmd;
+mod verify_cmd;
 
 pub use hash_cmd::*;
-pub use verify_cmd::*;
 pub use json_cmd::*;
 pub use txt_cmd::*;
+pub use verify_cmd::*;
 
 use clap::{Parser, Subcommand};
 

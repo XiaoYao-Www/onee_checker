@@ -25,6 +25,42 @@ cargo run -- hash ./TEST -a sha256
 RUSTFLAGS="-C target-cpu=native" cargo build --release
 ```
 
+## 常用指令
+
+```bash
+# 執行所有測試
+cargo test
+
+# 執行基準測試
+cargo bench
+
+# 格式化檢查
+cargo fmt --check
+
+# Clippy 靜態分析
+cargo clippy -- -D warnings
+```
+
+## 安全審計
+
+```bash
+# 安裝 cargo-audit
+cargo install cargo-audit
+
+# 檢查已知漏洞
+cargo audit
+```
+
+## 授權合規
+
+```bash
+# 安裝 cargo-deny
+cargo install cargo-deny
+
+# 檢查授權衝突
+cargo deny check
+```
+
 ## 專案結構
 
 ```
@@ -108,10 +144,41 @@ cargo test
 ### 整合測試
 
 ```bash
+# CLI 整合測試（23 項，包含所有演算法 + 邊界條件）
+cargo test --test cli_integration
+
+# 執行全部測試（單元 + 整合 + 文檔）
+cargo test
+
 # 用 TEST/ 目錄執行完整測試矩陣
 cargo run --release -- hash TEST -a sha256 -q
 cargo run --release -- verify TEST.sha256 -q
 ```
+
+### 標準化驗證流程
+
+專案提供可重複執行的驗證腳本，涵蓋編譯、測試、多線程一致性、邊界條件與安全性檢查：
+
+```bash
+# 完整驗證（含基準測試）
+bash verify.sh full
+
+# 快速驗證（跳過基準測試）
+bash verify.sh quick
+```
+
+### 測試覆蓋範圍
+
+| 層級 | 數量 | 說明 |
+|---|---|---|
+| 單元測試 | 37 | 各模組函數正確性 |
+| 整合測試 | 23 | CLI 端到端（所有演算法、多演算法、驗證、邊界條件） |
+| 基準測試 | 7 | 演算法效能、多演算法、BLAKE3 多線程比較 |
+
+### 新增測試
+
+整合測試位於 `tests/cli_integration.rs`，使用 `assert_cmd` 執行 CLI 二進位檔。
+新增測試時請依循命名慣例：`test_cli_<子命令>_<測試內容>`。
 
 ### CI 範例
 

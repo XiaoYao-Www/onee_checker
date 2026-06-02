@@ -13,7 +13,14 @@ use sha3::{
 #[derive(Clone)]
 pub struct Sha3_256Hasher(Sha3_256);
 
+impl Default for Sha3_256Hasher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Sha3_256Hasher {
+    #[must_use]
     pub fn new() -> Self {
         Self(Sha3_256::new())
     }
@@ -22,6 +29,7 @@ impl Sha3_256Hasher {
         Digest::update(&mut self.0, data);
     }
 
+    #[must_use]
     pub fn finish(self) -> Vec<u8> {
         self.0.finalize().to_vec()
     }
@@ -30,7 +38,14 @@ impl Sha3_256Hasher {
 #[derive(Clone)]
 pub struct Sha3_512Hasher(Sha3_512);
 
+impl Default for Sha3_512Hasher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Sha3_512Hasher {
+    #[must_use]
     pub fn new() -> Self {
         Self(Sha3_512::new())
     }
@@ -39,6 +54,7 @@ impl Sha3_512Hasher {
         Digest::update(&mut self.0, data);
     }
 
+    #[must_use]
     pub fn finish(self) -> Vec<u8> {
         self.0.finalize().to_vec()
     }
@@ -53,17 +69,16 @@ pub struct Shake128XofHasher {
 }
 
 impl Shake128XofHasher {
+    #[must_use]
     pub fn new(out_len: u16) -> Self {
-        Self {
-            inner: Shake128::default(),
-            out_len,
-        }
+        Self { inner: Shake128::default(), out_len }
     }
 
     pub fn update(&mut self, data: &[u8]) {
         Update::update(&mut self.inner, data);
     }
 
+    #[must_use]
     pub fn finish(self) -> Vec<u8> {
         let mut reader = self.inner.finalize_xof();
         let mut buf = vec![0u8; self.out_len as usize];
@@ -79,17 +94,16 @@ pub struct Shake256XofHasher {
 }
 
 impl Shake256XofHasher {
+    #[must_use]
     pub fn new(out_len: u16) -> Self {
-        Self {
-            inner: Shake256::default(),
-            out_len,
-        }
+        Self { inner: Shake256::default(), out_len }
     }
 
     pub fn update(&mut self, data: &[u8]) {
         Update::update(&mut self.inner, data);
     }
 
+    #[must_use]
     pub fn finish(self) -> Vec<u8> {
         let mut reader = self.inner.finalize_xof();
         let mut buf = vec![0u8; self.out_len as usize];

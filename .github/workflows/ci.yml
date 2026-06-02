@@ -1,0 +1,58 @@
+# Copyright (c) 2026 逍遙 (XiaoYao). Licensed under the MIT license.
+# SPDX-License-Identifier: MIT
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────
+  # 測試矩陣：三平台 × cargo test/clippy/fmt
+  # ──────────────────────────────────────────────
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: 執行測試
+        run: cargo test
+      - name: Clippy 檢查
+        run: cargo clippy -- -D warnings
+      - name: 格式化檢查
+        run: cargo fmt --check
+
+  # ──────────────────────────────────────────────
+  # 安全審計
+  # ──────────────────────────────────────────────
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: 安裝 cargo-audit
+        run: cargo install cargo-audit
+      - name: 執行安全審計
+        run: cargo audit
+
+  # ──────────────────────────────────────────────
+  # 授權合規檢查
+  # ──────────────────────────────────────────────
+  deny:
+    name: License Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2

@@ -27,7 +27,7 @@ pub fn list_files(path: &Path) -> io::Result<Vec<PathBuf>> {
     for entry in WalkDir::new(path)
         .sort_by(|a, b| a.file_name().cmp(b.file_name()))
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
     {
         if entry.file_type().is_file() {
             entries.push(entry.into_path());
@@ -57,29 +57,21 @@ fn build_node_recursive(path: &Path, root: &Path, depth: u16) -> io::Result<File
     let metadata = symlink_metadata(path)?;
     let file_type = metadata.file_type();
 
-    let name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| {
-            path.to_string_lossy()
-                .trim_start_matches("\\\\?\\")
-                .replace('\\', "/")
-        });
+    let name = path.file_name().map_or_else(
+        || path.to_string_lossy().trim_start_matches("\\\\?\\").replace('\\', "/"),
+        |n| n.to_string_lossy().into_owned(),
+    );
 
     let is_dir = file_type.is_dir();
     let is_symlink = file_type.is_symlink();
 
     let symlink_target: Option<String> = if is_symlink {
-        fs::read_link(path)
-            .ok()
-            .map(|p| p.to_string_lossy().into_owned().replace('\\', "/"))
+        fs::read_link(path).ok().map(|p| p.to_string_lossy().into_owned().replace('\\', "/"))
     } else {
         None
     };
 
-    let extension = path
-        .extension()
-        .map(|ext| ext.to_string_lossy().to_lowercase());
+    let extension = path.extension().map(|ext| ext.to_string_lossy().to_lowercase());
 
     let last_modified = metadata.modified().ok().map(to_unix_timestamp);
     let created_at = metadata.created().ok().map(to_unix_timestamp);
@@ -124,10 +116,11 @@ fn build_node_recursive(path: &Path, root: &Path, depth: u16) -> io::Result<File
                 .max_depth(1)
                 .sort_by(|a, b| a.file_name().cmp(b.file_name()))
                 .into_iter()
-                .filter_map(|e| e.ok())
-                .skip(1) // 跳過自身
+                .filter_map(std::result::Result::ok)
+                .skip(1)
+            // 跳過自身
             {
-                if let Ok(child) = build_node_recursive(&entry.path(), root, depth + 1) {
+                if let Ok(child) = build_node_recursive(entry.path(), root, depth + 1) {
                     dir_sum += child.size;
                     list.push(child);
                 }
@@ -158,6 +151,8 @@ fn build_node_recursive(path: &Path, root: &Path, depth: u16) -> io::Result<File
 }
 
 /// 將 `SystemTime` 轉換為 Unix timestamp (seconds)
+#[must_use]
+#[allow(clippy::cast_possible_wrap)]
 pub fn to_unix_timestamp(time: SystemTime) -> i64 {
     match time.duration_since(UNIX_EPOCH) {
         Ok(dur) => dur.as_secs() as i64,
@@ -207,6 +202,23 @@ mod tests {
 
         let files = list_files(&dir).unwrap();
         assert_eq!(files.len(), 2);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// 隱藏檔案（點前綴）應被包含在 `list_files` 中
+    #[test]
+    fn test_list_files_dot_prefix() {
+        let dir = std::env::temp_dir().join("onee_test_dot");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(".hidden"), b"hidden").unwrap();
+        fs::write(dir.join("visible.txt"), b"visible").unwrap();
+
+        let files = list_files(&dir).unwrap();
+        let names: Vec<&std::ffi::OsStr> = files.iter().filter_map(|f| f.file_name()).collect();
+        assert!(names.contains(&std::ffi::OsStr::new(".hidden")));
+        assert!(names.contains(&std::ffi::OsStr::new("visible.txt")));
 
         let _ = fs::remove_dir_all(&dir);
     }

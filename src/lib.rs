@@ -32,11 +32,14 @@ pub mod tree;
 pub mod prelude {
     pub use crate::algorithm::{BufferSize, HashAlgo, HashData, HashType};
     pub use crate::error::{OneeError, Result};
-    pub use crate::fs::{build_file_node, canonicalize_root, list_files, parse_hash_file, sanitize_rel_path, save_hash_file, validate_path, FileNode, HashEntry};
-    pub use crate::hash::{
-        compute_file_hash, compute_hash_reader, compute_hashes_parallel, verify_file_hash,
-        verify_hash_file,
+    pub use crate::fs::{
+        build_file_node, canonicalize_root, list_files, parse_hash_file, sanitize_rel_path,
+        save_hash_file, validate_path, FileNode, HashEntry,
     };
-    pub use crate::hasher::HasherEnum;
+    pub use crate::hash::{
+        compute_file_hash, compute_hash_reader, compute_hashes_parallel,
+        compute_multi_hashes_parallel, verify_file_hash, verify_hash_file,
+    };
+    pub use crate::hasher::{blake3_hash_bulk, HasherEnum};
     pub use crate::tree::{write_tree, SizeFormat, TreeOption};
 }

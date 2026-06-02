@@ -3,7 +3,7 @@
 
 [package]
 name = "onee_checker"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2021"
 description = "A professional hash verification & directory structure tool — library and CLI"
 authors = ["逍遙 (XiaoYao) <https://github.com/XiaoYao-Www>"]
@@ -12,6 +12,23 @@ repository = "https://github.com/XiaoYao-Www/onee_checker"
 readme = "README.md"
 keywords = ["hash", "checksum", "sha256", "blake3", "cli", "verification"]
 categories = ["command-line-utilities", "cryptography", "filesystem"]
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# ── 允許的 pedantic lints（測試中慣例或設計取捨） ──
+unwrap_used = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+unreadable_literal = "allow"
+needless_borrows_for_generic_args = "allow"
+cast_possible_wrap = "allow"
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+unused_self = "allow"
 
 [[bin]]
 name = "oneechk"
@@ -35,7 +52,7 @@ sha-1 = "0.10.1"
 sha2 = "0.11.0"
 sha3 = "0.11.0"
 blake2 = "0.10.6"
-blake3 = "1.8.5"
+blake3 = { version = "1.8.5", features = ["rayon"] }
 
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }
@@ -50,3 +67,13 @@ rayon = "1.12.0"
 # Utilities
 hex = "0.4.3"
 chrono = "0.4.44"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+assert_cmd = "2.0.16"
+predicates = "3.1.2"
+tempfile = "3.15.0"
+
+[[bench]]
+name = "hash_benchmark"
+harness = false

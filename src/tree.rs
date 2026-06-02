@@ -28,6 +28,7 @@ pub enum SizeFormat {
 
 impl SizeFormat {
     /// 格式化位元組大小
+    #[must_use]
     pub fn format(&self, bytes: u64) -> String {
         match self {
             Self::Raw => {
@@ -36,18 +37,28 @@ impl SizeFormat {
                 let len = s.len();
                 for (i, c) in s.chars().enumerate() {
                     result.push(c);
-                    if (len - i - 1) % 3 == 0 && i != len - 1 {
+                    if (len - i - 1).is_multiple_of(3) && i != len - 1 {
                         result.push(',');
                     }
                 }
                 format!("{result} B")
             }
-            Self::Binary => self.format_with_base(bytes, 1024.0, &["B", "KiB", "MiB", "GiB", "TiB", "PiB"]),
-            Self::Decimal => self.format_with_base(bytes, 1000.0, &["B", "KB", "MB", "GB", "TB", "PB"]),
+            Self::Binary => {
+                Self::format_with_base(bytes, 1024.0, &["B", "KiB", "MiB", "GiB", "TiB", "PiB"])
+            }
+            Self::Decimal => {
+                Self::format_with_base(bytes, 1000.0, &["B", "KB", "MB", "GB", "TB", "PB"])
+            }
         }
     }
 
-    fn format_with_base(&self, bytes: u64, base: f64, units: &[&str]) -> String {
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_wrap
+    )]
+    fn format_with_base(bytes: u64, base: f64, units: &[&str]) -> String {
         if bytes == 0 {
             return format!("0 {}", units[0]);
         }
@@ -67,7 +78,7 @@ impl SizeFormat {
 // ──────────────────────────────────────────────────────────
 
 /// 樹狀輸出選項
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TreeOption {
     /// 大小格式（None = 不顯示）
     pub size: Option<SizeFormat>,
@@ -75,16 +86,6 @@ pub struct TreeOption {
     pub last_modified: bool,
     /// 是否顯示建立時間
     pub created_at: bool,
-}
-
-impl Default for TreeOption {
-    fn default() -> Self {
-        Self {
-            size: None,
-            last_modified: false,
-            created_at: false,
-        }
-    }
 }
 
 // ──────────────────────────────────────────────────────────
@@ -148,11 +149,8 @@ fn write_tree_recursive<W: IoWrite>(
         writeln!(writer, "{prefix}{connector}{}{node_info}", node.name)?;
 
         if let Some(children) = &node.children {
-            let new_prefix = if is_last {
-                format!("{prefix}    ")
-            } else {
-                format!("{prefix}│   ")
-            };
+            let new_prefix =
+                if is_last { format!("{prefix}    ") } else { format!("{prefix}│   ") };
             write_tree_recursive(writer, children, &new_prefix, option)?;
         }
     }
@@ -161,10 +159,10 @@ fn write_tree_recursive<W: IoWrite>(
 }
 
 /// 將 Unix timestamp 格式化為本地時間字串
+#[must_use]
 pub fn format_unix_to_local(secs: i64) -> String {
     match Local.timestamp_opt(secs, 0) {
-        chrono::LocalResult::Single(dt)
-        | chrono::LocalResult::Ambiguous(dt, _) => {
+        chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => {
             dt.format("%Y-%m-%d %H:%M:%S %Z").to_string()
         }
         chrono::LocalResult::None => "無效的時間戳".to_string(),

@@ -44,6 +44,7 @@ pub enum HashType {
 
 impl HashType {
     /// 建立對應的 hasher 實例（零 heap alloc 的 enum dispatch）
+    #[must_use]
     pub fn create_hasher(&self) -> HasherEnum {
         match self {
             Self::MD5 => HasherEnum::Md5(Md5Hasher::new()),
@@ -63,35 +64,36 @@ impl HashType {
     }
 
     /// 該演算法是否支援自訂輸出長度
+    #[must_use]
     pub const fn can_specify_length(&self) -> bool {
         matches!(self, Self::SHAKE128(_) | Self::SHAKE256(_) | Self::BLAKE3(_))
     }
 
     /// 預設輸出長度（bytes）。固定長度演算法回傳其固定值。
+    #[must_use]
     pub const fn default_length(&self) -> u16 {
         match self {
             Self::MD5 => 16,
             Self::SHA1 => 20,
             Self::SHA224 => 28,
-            Self::SHA256 => 32,
+            Self::SHA256
+            | Self::SHA3_256
+            | Self::SHAKE128(_)
+            | Self::BLAKE2S256
+            | Self::BLAKE3(_) => 32,
             Self::SHA384 => 48,
-            Self::SHA512 => 64,
-            Self::SHA3_256 => 32,
-            Self::SHA3_512 => 64,
-            Self::SHAKE128(_) => 32,
-            Self::SHAKE256(_) => 64,
-            Self::BLAKE2S256 => 32,
-            Self::BLAKE2B512 => 64,
-            Self::BLAKE3(_) => 32,
+            Self::SHA512 | Self::SHA3_512 | Self::SHAKE256(_) | Self::BLAKE2B512 => 64,
         }
     }
 
     /// 雜湊值的位元長度（`default_length() * 8`）
+    #[must_use]
     pub const fn bit_length(&self) -> usize {
         (self.default_length() as usize) * 8
     }
 
     /// 檔案副檔名（不含點），例如 `"sha256"`、`"shake128-256"`、`"blake3-256"`
+    #[must_use]
     pub fn suffix(&self) -> String {
         match self {
             Self::MD5 => "md5".into(),
@@ -111,6 +113,7 @@ impl HashType {
     }
 
     /// 人類可讀的算法名稱（用於錯誤訊息）
+    #[must_use]
     pub fn display_name(&self) -> &'static str {
         match self {
             Self::MD5 => "MD5",
@@ -146,16 +149,14 @@ pub struct HashData {
 }
 
 impl HashData {
-    /// 建立新的 HashData
+    /// 建立新的 `HashData`
+    #[must_use]
     pub fn new(path: PathBuf, hash_bytes: Vec<u8>, hash_type: HashType) -> Self {
-        Self {
-            path,
-            hash_bytes,
-            hash_type,
-        }
+        Self { path, hash_bytes, hash_type }
     }
 
     /// 回傳十六進位 hash 字串（分配新 String）
+    #[must_use]
     pub fn hash_hex(&self) -> String {
         let mut buf = String::with_capacity(self.hash_bytes.len() * 2);
         self.hash_hex_into(&mut buf);
@@ -173,10 +174,7 @@ impl HashData {
     /// ```
     pub fn hash_hex_into(&self, buf: &mut String) {
         buf.reserve(self.hash_bytes.len() * 2);
-        for byte in &self.hash_bytes {
-            use std::fmt::Write;
-            let _ = write!(buf, "{byte:02x}");
-        }
+        buf.push_str(&hex::encode(&self.hash_bytes));
     }
 }
 
@@ -235,30 +233,26 @@ impl HashAlgo {
     }
 
     /// 該 CLI 算法是否支援自訂長度
+    #[must_use]
     pub const fn can_specify_length(&self) -> bool {
         matches!(self, Self::Shake128 | Self::Shake256 | Self::Blake3)
     }
 
     /// 預設長度（bytes）
+    #[must_use]
     pub const fn default_length(&self) -> u16 {
         match self {
             Self::Md5 => 16,
             Self::Sha1 => 20,
             Self::Sha224 => 28,
-            Self::Sha256 => 32,
+            Self::Sha256 | Self::Sha3256 | Self::Shake128 | Self::Blake2s256 | Self::Blake3 => 32,
             Self::Sha384 => 48,
-            Self::Sha512 => 64,
-            Self::Sha3256 => 32,
-            Self::Sha3512 => 64,
-            Self::Shake128 => 32,
-            Self::Shake256 => 64,
-            Self::Blake2s256 => 32,
-            Self::Blake2b512 => 64,
-            Self::Blake3 => 32,
+            Self::Sha512 | Self::Sha3512 | Self::Shake256 | Self::Blake2b512 => 64,
         }
     }
 
     /// 從副檔名猜測演算法
+    #[must_use]
     pub fn from_suffix(suffix: &str) -> Option<Self> {
         match suffix {
             "md5" => Some(Self::Md5),
@@ -283,12 +277,23 @@ impl HashAlgo {
 //  BufferSize — human-readable buffer 解析
 // ──────────────────────────────────────────────────────────
 
+/// 預設緩衝區大小（1 MiB）
+pub const DEFAULT_BUFFER_SIZE: usize = 1024 * 1024;
+
+/// 最小緩衝區大小（512 bytes）
+const MIN_BUFFER_SIZE: usize = 512;
+
 /// 人類可讀的 buffer 大小，例如 `4K`、`1M`、`64K`。
 ///
 /// 支援後綴：`B` (bytes)、`K` (KiB)、`M` (MiB)、`G` (GiB)。
 /// 無後綴時視為 bytes。
 #[derive(Debug, Clone)]
 pub struct BufferSize(pub usize);
+
+impl BufferSize {
+    /// 預設緩衝區大小（1 MiB）
+    pub const DEFAULT: Self = Self(DEFAULT_BUFFER_SIZE);
+}
 
 impl std::str::FromStr for BufferSize {
     type Err = OneeError;
@@ -300,16 +305,16 @@ impl std::str::FromStr for BufferSize {
             return Err(OneeError::ArgumentError("buffer size 不可為空".into()));
         }
 
-        let (num_part, unit) = if s.ends_with("b") {
+        let (num_part, unit) = if s.ends_with('b') {
             let (n, _) = s.split_at(s.len() - 1);
             (n, 'b')
-        } else if s.ends_with("k") {
+        } else if s.ends_with('k') {
             let (n, _) = s.split_at(s.len() - 1);
             (n, 'k')
-        } else if s.ends_with("m") {
+        } else if s.ends_with('m') {
             let (n, _) = s.split_at(s.len() - 1);
             (n, 'm')
-        } else if s.ends_with("g") {
+        } else if s.ends_with('g') {
             let (n, _) = s.split_at(s.len() - 1);
             (n, 'g')
         } else {
@@ -328,8 +333,10 @@ impl std::str::FromStr for BufferSize {
             _ => unreachable!(),
         };
 
-        if bytes == 0 {
-            return Err(OneeError::ArgumentError("buffer size 必須大於 0".into()));
+        if bytes < MIN_BUFFER_SIZE {
+            return Err(OneeError::ArgumentError(format!(
+                "buffer size 不可小於 {MIN_BUFFER_SIZE} bytes: 收到 {bytes} bytes"
+            )));
         }
 
         Ok(Self(bytes))
@@ -368,19 +375,43 @@ mod tests {
     }
 
     #[test]
+    fn test_buffer_size_too_small() {
+        assert!("1".parse::<BufferSize>().is_err()); // 1 byte < 512
+        assert!("511B".parse::<BufferSize>().is_err());
+        assert!("512B".parse::<BufferSize>().is_ok());
+        assert_eq!(BufferSize::DEFAULT.0, DEFAULT_BUFFER_SIZE);
+    }
+
+    #[test]
+    fn test_hash_type_all_variants_create_hasher() {
+        // 確認 14+ 種變體均可 create_hasher
+        let variants = [
+            HashType::MD5,
+            HashType::SHA1,
+            HashType::SHA224,
+            HashType::SHA256,
+            HashType::SHA384,
+            HashType::SHA512,
+            HashType::SHA3_256,
+            HashType::SHA3_512,
+            HashType::SHAKE128(32),
+            HashType::SHAKE256(64),
+            HashType::BLAKE2S256,
+            HashType::BLAKE2B512,
+            HashType::BLAKE3(32),
+            HashType::BLAKE3(64),
+        ];
+        for v in &variants {
+            let hasher = v.create_hasher();
+            assert!(std::mem::size_of_val(&hasher) > 0);
+        }
+    }
+
+    #[test]
     fn test_hash_algo_to_hash_type() {
-        assert_eq!(
-            HashAlgo::Sha256.to_hash_type(None).unwrap(),
-            HashType::SHA256
-        );
-        assert_eq!(
-            HashAlgo::Blake3.to_hash_type(Some(64)).unwrap(),
-            HashType::BLAKE3(64)
-        );
-        assert_eq!(
-            HashAlgo::Shake128.to_hash_type(None).unwrap(),
-            HashType::SHAKE128(32)
-        );
+        assert_eq!(HashAlgo::Sha256.to_hash_type(None).unwrap(), HashType::SHA256);
+        assert_eq!(HashAlgo::Blake3.to_hash_type(Some(64)).unwrap(), HashType::BLAKE3(64));
+        assert_eq!(HashAlgo::Shake128.to_hash_type(None).unwrap(), HashType::SHAKE128(32));
     }
 
     #[test]

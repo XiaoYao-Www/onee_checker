@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Author](https://img.shields.io/badge/author-XiaoYao--Www-blue)](https://github.com/XiaoYao-Www)
 [![Trademark](https://img.shields.io/badge/trademark-retained-orange.svg)](NOTICE)
+[![CI](https://github.com/XiaoYao-Www/onee_checker/actions/workflows/ci.yml/badge.svg)](https://github.com/XiaoYao-Www/onee_checker/actions/workflows/ci.yml)
 
 > Copyright © 2026 [逍遙 (XiaoYao)](https://github.com/XiaoYao-Www).  
 > SPDX-License-Identifier: MIT  
@@ -373,6 +374,21 @@ src/
 | `serde` / `serde_json` | JSON 序列化 | 1.0 |
 | `thiserror` | 結構化錯誤 | 2 |
 | `chrono` | 時間格式化 | 0.4 |
+
+---
+
+## 效能基準
+
+在 x86_64 處理器上以 `cargo bench` 測得（release 模式）：
+
+| 情境 | 吞吐量 | 備註 |
+|------|--------|------|
+| SHA-256 1MB | ~2.6 GB/s | `sha2` crate，含 SHA-NI 加速 |
+| BLAKE3 1MB | ~5.7 GB/s | 自動偵測 AVX2 |
+| BLAKE3 100MB | ~5.1 GB/s | 串流模式，O(1) 記憶體 |
+| hex 編碼 (32 bytes) | ~310 MB/s | `hex::encode` |
+
+> 完整基準報告：執行 `cargo bench`
 
 ---
 

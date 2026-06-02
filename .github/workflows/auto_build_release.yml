@@ -88,6 +88,10 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
+      - name: 執行測試 (Test)
+        shell: bash
+        run: cargo test --release
+
       - name: 安裝 Cross (Install Cross)
         if: matrix.use_cross
         uses: taiki-e/install-action@v2

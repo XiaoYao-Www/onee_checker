@@ -1,0 +1,29 @@
+# Copyright (c) 2026 逍遙 (XiaoYao). Licensed under the MIT license.
+# SPDX-License-Identifier: MIT
+
+[advisories]
+vulnerability = "deny"
+unmaintained = "warn"
+yanked = "warn"
+notice = "warn"
+ignore = []
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unlicense",
+    "Zlib",
+]
+deny = []
+copyleft = "deny"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"

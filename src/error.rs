@@ -17,7 +17,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum OneeError {
     // ── I/O ──────────────────────────────────────────────
-    /// 包裝 std::io::Error
+    /// 包裝 `std::io::Error`
     #[error("I/O 錯誤: {0}")]
     Io(#[from] std::io::Error),
 
@@ -28,18 +28,11 @@ pub enum OneeError {
     // ── Hash ─────────────────────────────────────────────
     /// 驗證時 hash 不匹配
     #[error("Hash 不匹配: {path}\n  預期: {expected}\n  實際: {actual}")]
-    HashMismatch {
-        path: PathBuf,
-        expected: String,
-        actual: String,
-    },
+    HashMismatch { path: PathBuf, expected: String, actual: String },
 
     /// Hash 檔解析錯誤（格式不符）
     #[error("Hash 檔格式錯誤 (行 {line}): {detail}")]
-    HashFileParseError {
-        line: usize,
-        detail: String,
-    },
+    HashFileParseError { line: usize, detail: String },
 
     // ── 輸入驗證 ─────────────────────────────────────────
     /// 路徑不存在或不是有效檔案/目錄
@@ -48,9 +41,7 @@ pub enum OneeError {
 
     /// 算法不支援自訂長度
     #[error("算法不支援自訂輸出長度: {algorithm}")]
-    UnsupportedLength {
-        algorithm: String,
-    },
+    UnsupportedLength { algorithm: String },
 
     /// 不支援或未知的 hash 算法
     #[error("不支援的算法: {0}")]
@@ -63,6 +54,7 @@ pub enum OneeError {
 
 impl OneeError {
     /// 根據錯誤類型回傳 POSIX exit code
+    #[must_use]
     pub const fn exit_code(&self) -> i32 {
         match self {
             Self::HashMismatch { .. } => 1,

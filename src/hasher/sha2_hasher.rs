@@ -10,7 +10,14 @@ macro_rules! sha2_hasher {
         #[derive(Clone)]
         pub struct $name($inner);
 
+        impl Default for $name {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
         impl $name {
+            #[must_use]
             pub fn new() -> Self {
                 Self(<$inner>::new())
             }
@@ -19,6 +26,7 @@ macro_rules! sha2_hasher {
                 self.0.update(data);
             }
 
+            #[must_use]
             pub fn finish(self) -> Vec<u8> {
                 self.0.finalize().to_vec()
             }

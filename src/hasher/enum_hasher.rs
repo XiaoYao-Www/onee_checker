@@ -7,10 +7,14 @@
 //!
 //! - **零 heap alloc**: `HasherEnum` 是 stack-allocated flat enum，14 個變體共用同一塊記憶體
 //! - **Static dispatch**: `update()` / `finalize()` 透過 `match` 分發到具體類型，編譯器可完全 inline
-//! - **Clone**: 每個變體內層類型均實作 `Clone`（RustCrypto 的 `CoreWrapper<T>`），複製約 64–200 bytes
+//! - **Clone**: 每個變體內層類型均實作 `Clone`（`RustCrypto` 的 `CoreWrapper<T>`），複製約 64–200 bytes
 //! - **Send + Sync**: 所有內層 crate 類型均為 `Send + Sync`
 
-use super::*;
+use super::{
+    Blake2b512Hasher, Blake2s256Hasher, Blake3Hasher, Md5Hasher, Sha1Hasher, Sha224Hasher,
+    Sha256Hasher, Sha384Hasher, Sha3_256Hasher, Sha3_512Hasher, Sha512Hasher, Shake128XofHasher,
+    Shake256XofHasher,
+};
 
 /// 14 種雜湊演算法的零成本靜態分發枚舉
 ///
@@ -24,6 +28,12 @@ use super::*;
 /// let hash = h.finalize();
 /// assert_eq!(hash.len(), 32);
 /// ```
+///
+/// # 設計取捨
+///
+/// BLAKE3 內部狀態較大（~1928 bytes）導致 `HasherEnum` 整體大小約 1936 bytes。
+/// 不 boxing 的原因是保持 stack allocation 與零成本 dispatch。
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
 pub enum HasherEnum {
     Md5(Md5Hasher),
@@ -62,8 +72,20 @@ impl HasherEnum {
         }
     }
 
+    /// 一次將整個 buffer 餵入雜湊器。
+    ///
+    /// 與 `update()` 功能相同，但語意上表示呼叫者已準備好全部資料。
+    /// BLAKE3 多線程優化在更高層的 `blake3_hash_bulk()` 中實作。
+    #[inline]
+    pub fn update_bulk(&mut self, data: &[u8]) {
+        // BLAKE3 多線程由 higher-level `blake3_hash_bulk()` 函式處理；
+        // 此處統一使用串流 update 以保持 enum dispatch 的一致性。
+        self.update(data);
+    }
+
     /// 完成計算並回傳雜湊值（consumes self）
     #[inline]
+    #[must_use]
     pub fn finalize(self) -> Vec<u8> {
         match self {
             Self::Md5(h) => h.finish(),
@@ -92,10 +114,13 @@ mod tests {
         let h1 = HasherEnum::Sha256(Sha256Hasher::new());
         let mut h2 = h1.clone();
 
-        h1.finalize();
+        let _ = h1.finalize();
         h2.update(b"hello");
         let result = h2.finalize();
-        assert_eq!(hex::encode(&result), "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+        assert_eq!(
+            hex::encode(&result),
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
     }
 
     #[test]

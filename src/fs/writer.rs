@@ -5,7 +5,7 @@
 //!
 //! # 安全準則
 //!
-//! - `parse_hash_file` 有行數上限（10M）防止 DoS
+//! - `parse_hash_file` 有行數上限（10M）防止 `DoS`
 //! - `HashEntry` 建構時驗證 hex 格式與路徑基本合法性
 //! - 路徑分割使用確定性邏輯（`find(' ')`），不依賴模糊的 `contains(" *")`
 
@@ -15,9 +15,9 @@ use std::path::Path;
 
 use chrono::Local;
 
+use super::node::FileNodeContainer;
 use crate::algorithm::HashData;
 use crate::error::{OneeError, Result};
-use super::node::FileNodeContainer;
 
 /// 最大 hash 檔解析行數（DoS 防護）
 const MAX_HASH_LINES: usize = 10_000_000;
@@ -44,16 +44,13 @@ impl HashEntry {
     ///
     /// ## 錯誤
     /// - hash 不是有效的 hex 字串
-    /// - rel_path 為空
+    /// - `rel_path` 為空
     pub fn new(hash_hex: &str, rel_path: &str) -> Result<Self> {
         let hash = hash_hex.trim().to_string();
         let path = rel_path.trim().to_string();
 
         if hash.is_empty() {
-            return Err(OneeError::HashFileParseError {
-                line: 0,
-                detail: "hash 值為空".into(),
-            });
+            return Err(OneeError::HashFileParseError { line: 0, detail: "hash 值為空".into() });
         }
 
         if !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -65,10 +62,7 @@ impl HashEntry {
         }
 
         if path.is_empty() {
-            return Err(OneeError::HashFileParseError {
-                line: 0,
-                detail: "路徑為空".into(),
-            });
+            return Err(OneeError::HashFileParseError { line: 0, detail: "路徑為空".into() });
         }
 
         // 拒絕路徑中的 null byte（底層 C 截斷攻擊）
@@ -79,13 +73,33 @@ impl HashEntry {
             });
         }
 
-        Ok(Self {
-            hash_hex: hash,
-            rel_path: path,
-        })
+        Ok(Self { hash_hex: hash, rel_path: path })
+    }
+
+    /// 建立新的 `HashEntry`，額外驗證 hex 長度是否符合預期演算法。
+    ///
+    /// 除了 `new` 的所有驗證外，還檢查：
+    /// - `hash_hex.len() / 2 == expected_byte_len`
+    ///
+    /// 用於 verify 流程：確保 hash 檔內容的 hex 長度與演算法宣告一致。
+    pub fn new_with_len(hash_hex: &str, rel_path: &str, expected_byte_len: usize) -> Result<Self> {
+        let entry = Self::new(hash_hex, rel_path)?;
+        if entry.hash_byte_length() != expected_byte_len {
+            return Err(OneeError::HashFileParseError {
+                line: 0,
+                detail: format!(
+                    "hash 長度不符: 預期 {expected_byte_len} bytes (hex {} chars), 實際 {} bytes (hex {} chars)",
+                    expected_byte_len * 2,
+                    entry.hash_byte_length(),
+                    entry.hash_hex.len(),
+                ),
+            });
+        }
+        Ok(entry)
     }
 
     /// 回傳該 hash 的預期 byte 長度（hex length / 2）
+    #[must_use]
     pub fn hash_byte_length(&self) -> usize {
         self.hash_hex.len() / 2
     }
@@ -103,11 +117,7 @@ impl HashEntry {
 /// ```
 ///
 /// `*` 表示二進位模式。
-pub fn save_hash_file(
-    data: &[HashData],
-    output_path: &Path,
-    root_path: &Path,
-) -> io::Result<()> {
+pub fn save_hash_file(data: &[HashData], output_path: &Path, root_path: &Path) -> io::Result<()> {
     let mut writer = BufWriter::new(File::create(output_path)?);
 
     writeln!(writer, "# ******************************")?;
@@ -117,10 +127,7 @@ pub fn save_hash_file(
 
     let mut hex_buf = String::with_capacity(128); // SHA-512 hex = 128 chars
     for entry in data {
-        let rel_path = entry
-            .path
-            .strip_prefix(root_path)
-            .unwrap_or(&entry.path);
+        let rel_path = entry.path.strip_prefix(root_path).unwrap_or(&entry.path);
         let path_str = rel_path.to_string_lossy().replace('\\', "/");
         hex_buf.clear();
         entry.hash_hex_into(&mut hex_buf);
@@ -132,10 +139,7 @@ pub fn save_hash_file(
 }
 
 /// 將 `FileNodeContainer` 寫入 JSON 檔案（含縮排）。
-pub fn save_file_node_json(
-    container: &FileNodeContainer,
-    output_path: &Path,
-) -> io::Result<()> {
+pub fn save_file_node_json(container: &FileNodeContainer, output_path: &Path) -> io::Result<()> {
     let file = File::create(output_path)?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, container)?;
@@ -167,6 +171,7 @@ pub fn save_file_node_json(
 /// 1. 找第一個空格位置 → hash 結束
 /// 2. 跳過空格後的模式字元（`*` 或空格）→ path 開始
 /// 3. 剩餘部分即為路徑（保留空格）
+#[must_use]
 pub fn parse_hash_file(content: &str) -> Vec<HashEntry> {
     content
         .lines()
@@ -200,11 +205,7 @@ pub fn parse_hash_file(content: &str) -> Vec<HashEntry> {
                 Ok(entry) => Some(entry),
                 Err(e) => {
                     // 解析錯誤時，在錯誤訊息中註記行號
-                    eprintln!(
-                        "⚠ 跳過第 {} 行: {}",
-                        lineno + 1,
-                        e
-                    );
+                    eprintln!("⚠ 跳過第 {} 行: {}", lineno + 1, e);
                     None
                 }
             }
@@ -226,6 +227,25 @@ mod tests {
     }
 
     #[test]
+    fn test_hash_entry_new_with_len() {
+        // MD5 = 16 bytes (32 hex chars)
+        let md5_hex = "d41d8cd98f00b204e9800998ecf8427e";
+        assert!(HashEntry::new_with_len(md5_hex, "f.txt", 16).is_ok());
+
+        // 傳入 64 hex chars (32 bytes) 但預期 16 bytes → Err
+        let sha256_hex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        assert!(HashEntry::new_with_len(sha256_hex, "f.txt", 16).is_err());
+
+        // 預期長度與 hex 長度匹配 → Ok
+        assert!(HashEntry::new_with_len(sha256_hex, "f.txt", 32).is_ok());
+
+        // SHA-512 = 64 bytes (128 hex chars)
+        let sha512_hex = "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e";
+        assert!(HashEntry::new_with_len(sha512_hex, "f.txt", 64).is_ok());
+        assert!(HashEntry::new_with_len(sha512_hex, "f.txt", 32).is_err());
+    }
+
+    #[test]
     fn test_parse_hash_file_standard() {
         let content = "# comment
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 *file1.txt
@@ -235,7 +255,10 @@ d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592  file2.txt
 789abc *sub/file3.bin";
         let entries = parse_hash_file(content);
         assert_eq!(entries.len(), 3);
-        assert_eq!(entries[0].hash_hex, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        assert_eq!(
+            entries[0].hash_hex,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
         assert_eq!(entries[0].rel_path, "file1.txt");
         assert_eq!(entries[1].rel_path, "file2.txt");
         assert_eq!(entries[2].rel_path, "sub/file3.bin");

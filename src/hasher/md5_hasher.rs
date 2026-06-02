@@ -8,7 +8,14 @@ use md5::{Digest, Md5};
 #[derive(Clone)]
 pub struct Md5Hasher(Md5);
 
+impl Default for Md5Hasher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Md5Hasher {
+    #[must_use]
     pub fn new() -> Self {
         Self(Md5::new())
     }
@@ -17,6 +24,7 @@ impl Md5Hasher {
         self.0.update(data);
     }
 
+    #[must_use]
     pub fn finish(self) -> Vec<u8> {
         self.0.finalize().to_vec()
     }
