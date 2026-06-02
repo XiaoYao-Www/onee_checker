@@ -111,14 +111,19 @@ jobs:
         shell: bash
         run: |
           VERSION="${{ needs.check_version.outputs.version }}"
-          BIN_NAME=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].name')
+          # BIN_NAME 是 [[bin]] 定義的二進位名稱，不是 package name
+          # Cargo.toml: name = "oneechk"
+          BIN_NAME="oneechk"
           DIST_DIR="dist/${{ matrix.target }}"
           mkdir -p "$DIST_DIR"
 
           # 複製執行檔
           cp "target/${{ matrix.target }}/release/${BIN_NAME}${{ matrix.ext }}" \
             "$DIST_DIR/${BIN_NAME}-${VERSION}${{ matrix.ext }}"
-          
+
+          # 複製 README 與 LICENSE 到發布包
+          cp README.md LICENSE NOTICE "$DIST_DIR/"
+
           # 進入目錄打包，避免壓縮檔包含路徑
           cd dist
 

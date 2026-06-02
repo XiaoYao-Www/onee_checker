@@ -2,19 +2,10 @@
 # SPDX-License-Identifier: MIT
 
 [advisories]
-# 設定發現漏洞時的處理方式 (預設通常是 deny)
 vulnerability = "deny"
-
-# 1. 調整檢查範圍 (必須是 "all", "workspace", "transitive", 或 "none")
 unmaintained = "all"
-yanked = "all"
+yanked = "warn"
 notice = "all"
-
-# 2. 調整警告等級 (在這裡設定你原本想要的 "warn")
-unmaintained-lint = "warn"
-yanked-lint = "warn"
-notice-lint = "warn"
-
 ignore = []
 
 [licenses]
