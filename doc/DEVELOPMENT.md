@@ -29,7 +29,7 @@ RUSTFLAGS="-C target-cpu=native" cargo build --release
 
 ```bash
 # 執行所有測試
-cargo test
+cargo test --locked
 
 # 執行基準測試
 cargo bench
@@ -37,8 +37,8 @@ cargo bench
 # 格式化檢查
 cargo fmt --check
 
-# Clippy 靜態分析
-cargo clippy -- -D warnings
+# Clippy 靜態分析（含測試與基準）
+cargo clippy --all-targets --locked -- -D warnings
 ```
 
 ## 安全審計
@@ -121,6 +121,17 @@ onee_checker/
 - **SHA-2**: `sha2` v0.11 自動檢測 SHA-NI（需 `target-cpu=native` 編譯）
 - **BLAKE3**: 執行期自動檢測 SSE4.1 / AVX2 / AVX-512
 
+### Windows GNU target（選用）
+
+本專案**不提交** Cargo 設定檔。CI 直接使用 windows-latest 內建的 MinGW 連結 `x86_64-pc-windows-gnu`；若本機想重現發布產物，建議用環境變數指定 target：
+
+```powershell
+$env:CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu"
+cargo build --release --locked
+```
+
+`.cargo/config.toml` 屬於本機設定；**不要**把 `[build] target` 提交進儲存庫，否則 Linux/macOS 的 CI 也會被強迫交叉編譯 Windows。舊版放在 `cargo/config.toml` 的設定 Cargo 不會讀取（正確位置是 `.cargo/config.toml`），已於 2.0.3 移除。
+
 ## 測試
 
 ### 單元測試
@@ -180,23 +191,25 @@ bash verify.sh quick
 整合測試位於 `tests/cli_integration.rs`，使用 `assert_cmd` 執行 CLI 二進位檔。
 新增測試時請依循命名慣例：`test_cli_<子命令>_<測試內容>`。
 
-### CI 範例
+### CI 流程
 
-```yaml
-# .github/workflows/test.yml
-name: Test
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test
-      - run: cargo build --release
+實際流程定義於 `.github/workflows/`；文件與設定不一致時，一律以 workflow 檔案為準：
+
+| Workflow | 觸發條件 | 內容 |
+|---|---|---|
+| `ci.yml` | 所有分支 push、PR 到 `main` | 三平台（ubuntu/windows/macos）`cargo test --locked`、`cargo clippy --all-targets -- -D warnings`、`cargo fmt --check`；另有 `cargo audit` 與 `cargo deny check` |
+| `auto_build_release.yml` | push 到 `main`、手動觸發 | 讀取 `Cargo.toml` 版本；若 `v<版本>_Auto` 標籤不存在，建置 Windows（x86_64-pc-windows-gnu）與兩個 Linux musl（x86_64/aarch64）產物並建立 GitHub Release |
+
+推送 `main` 後會自動發布新版本。版本號以 `Cargo.toml` 的 `[package].version` 為準；發布前請同步更新 `Cargo.toml`、`Cargo.lock` 與 `doc/CLI.md` 的版本標註。
+
+### 本機重現 CI
+
+```bash
+cargo test --locked
+cargo clippy --all-targets --locked -- -D warnings
+cargo fmt --check
+cargo audit
+cargo deny check
 ```
 
 ## 程式碼風格

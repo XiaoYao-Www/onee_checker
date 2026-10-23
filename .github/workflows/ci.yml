@@ -12,24 +12,36 @@ on:
 permissions:
   contents: read
 
+# 同一 ref 的新推送會取消舊的檢查，避免佇列堆積
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   # ──────────────────────────────────────────────
   # 測試矩陣：三平台 × cargo test/clippy/fmt
   # ──────────────────────────────────────────────
   test:
     name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: swatinem/rust-cache@v2
       - name: 執行測試
-        run: cargo test
-      - name: Clippy 檢查
-        run: cargo clippy -- -D warnings
+        run: cargo test --locked
+      - name: Clippy 檢查（含測試與基準）
+        run: cargo clippy --all-targets --locked -- -D warnings
       - name: 格式化檢查
         run: cargo fmt --check
 
@@ -39,11 +51,14 @@ jobs:
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: 安裝 cargo-audit
-        run: cargo install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
       - name: 執行安全審計
         run: cargo audit
 
@@ -53,6 +68,7 @@ jobs:
   deny:
     name: License Compliance
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2

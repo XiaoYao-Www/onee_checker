@@ -3,7 +3,7 @@
 
 [package]
 name = "onee_checker"
-version = "2.0.2"
+version = "2.0.3"
 edition = "2021"
 description = "A professional hash verification & directory structure tool — library and CLI"
 authors = ["逍遙 (XiaoYao) <https://github.com/XiaoYao-Www>"]
