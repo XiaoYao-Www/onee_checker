@@ -319,7 +319,7 @@ Onee Checker 在設計中考慮了以下安全防護：
 | **Buffer overflow** | `u16` 限制可變長度雜湊長度最大值 |
 | **Stack overflow** | `build_node_recursive` 深度上限 1024 層 |
 
-詳見 `功能驗證/` 目錄下的完整驗證報告。
+詳見 [`doc/SECURITY.md`](doc/SECURITY.md) 與 [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) 的安全設計說明。
 
 ---
 

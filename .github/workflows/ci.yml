@@ -46,6 +46,22 @@ jobs:
         run: cargo fmt --check
 
   # ──────────────────────────────────────────────
+  # MSRV：驗證 Cargo.toml 宣告的最低 Rust 版本仍可建置
+  # ──────────────────────────────────────────────
+  msrv:
+    name: MSRV (1.87)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.87.0
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: msrv
+      - name: 檢查最低版本可編譯（含測試與基準）
+        run: cargo check --all-targets --locked
+
+  # ──────────────────────────────────────────────
   # 安全審計
   # ──────────────────────────────────────────────
   audit:

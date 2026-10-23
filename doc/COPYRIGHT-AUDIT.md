@@ -142,7 +142,7 @@ categories = ["command-line-utilities", "cryptography", "filesystem"]
 |---|---|
 | 🟢 低 | 為 `Onee Checker` 名稱註冊商標（如計劃商業化） |
 | 🟢 低 | 取代 TEST/ 目錄內容為無版權測試資料 |
-| 🟢 低 | 在 CI/CD pipeline 中添加 `cargo-deny` 或 `cargo-license` 自動掃描（目前 `verify.sh` 含手動檢測） |
+| ✅ 已完成 | CI 已加入 `cargo-deny` 掃描與 `cargo audit`（2.0.3 起，見 `.github/workflows/ci.yml`） |
 
 ---
 

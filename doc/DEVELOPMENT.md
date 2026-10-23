@@ -2,7 +2,7 @@
 
 ## 環境需求
 
-- **Rust**: 1.70+ (stable)
+- **Rust**: 1.87+（CI 以最新 stable 驗證；另以 1.87 驗證最低版本）
 - **OS**: Windows 10+, Linux (kernel 4.4+), macOS 10.15+
 
 ## 快速開始
@@ -73,10 +73,10 @@ onee_checker/
 │   ├── API.md              # Library API 參考
 │   ├── SECURITY.md         # 安全性設計
 │   ├── ARCHITECTURE.md     # 架構文件
-│   └── DEVELOPMENT.md      # 本文件
-├── 功能驗證/               # 驗證報告
-│   ├── 驗證規劃_*.md
-│   └── 驗證結果*.md
+│   ├── DEVELOPMENT.md      # 本文件
+│   ├── DESIGN-PLAN.md      # 設計規劃
+│   ├── COPYRIGHT-AUDIT.md  # 授權稽核
+│   └── LICENSE-AUDIT.md    # 授權條款稽核
 ├── src/
 │   ├── lib.rs              # Library 公開 API + prelude
 │   ├── main.rs             # CLI 入口
@@ -105,7 +105,7 @@ onee_checker/
 │       ├── sha3_hasher.rs
 │       ├── blake2_hasher.rs
 │       └── blake3_hasher.rs
-└── TEST/                   # 測試資料 (880+ 檔案)
+└── TEST/                   # 測試資料 (879 檔案)
 ```
 
 ## 編譯優化
@@ -144,18 +144,18 @@ cargo test
 
 | 模組 | 測試數 | 說明 |
 |---|---|---|
-| `algorithm` | 4 | BufferSize 解析, HashAlgo 轉換, 副檔名 |
-| `hash` | 3 | compute_hash_reader, compute_file_hash, verify |
+| `algorithm` | 6 | BufferSize 解析, HashAlgo 轉換, 副檔名, 各變體建立 hasher |
+| `hash` | 6 | compute_hash_reader, compute_file_hash, verify, 空檔/大檔 |
 | `hasher::enum_hasher` | 3 | Clone 正確性, 所有演算法輸出長度 |
-| `fs::writer` | 5 | HashEntry 驗證, parser 正確性, 邊界案例 |
-| `fs::walker` | 3 | 檔案列表, FileNode 建構, 深度限制 |
-| `fs::path_safe` | 5 | 正常路徑, dotdot 拒絕, 絕對路徑, 空路徑, 根目錄 |
+| `fs::writer` | 7 | HashEntry 驗證, parser 正確性, 邊界案例 |
+| `fs::walker` | 5 | 檔案列表, FileNode 建構, 深度限制 |
+| `fs::path_safe` | 7 | 正常路徑, dotdot 拒絕, 絕對路徑, 空路徑, 根目錄, Unicode/空白 |
 | `tree` | 3 | 大小格式化 (binary/decimal/raw) |
 
 ### 整合測試
 
 ```bash
-# CLI 整合測試（23 項，包含所有演算法 + 邊界條件）
+# CLI 整合測試（25 項，包含所有演算法 + 邊界條件）
 cargo test --test cli_integration
 
 # 執行全部測試（單元 + 整合 + 文檔）
@@ -183,7 +183,7 @@ bash verify.sh quick
 | 層級 | 數量 | 說明 |
 |---|---|---|
 | 單元測試 | 37 | 各模組函數正確性 |
-| 整合測試 | 23 | CLI 端到端（所有演算法、多演算法、驗證、邊界條件） |
+| 整合測試 | 25 | CLI 端到端（所有演算法、多演算法、驗證、邊界條件） |
 | 基準測試 | 7 | 演算法效能、多演算法、BLAKE3 多線程比較 |
 
 ### 新增測試
@@ -197,7 +197,7 @@ bash verify.sh quick
 
 | Workflow | 觸發條件 | 內容 |
 |---|---|---|
-| `ci.yml` | 所有分支 push、PR 到 `main` | 三平台（ubuntu/windows/macos）`cargo test --locked`、`cargo clippy --all-targets -- -D warnings`、`cargo fmt --check`；另有 `cargo audit` 與 `cargo deny check` |
+| `ci.yml` | 所有分支 push、PR 到 `main` | 三平台（ubuntu/windows/macos）`cargo test --locked`、`cargo clippy --all-targets -- -D warnings`、`cargo fmt --check`；另有 MSRV（1.87）`cargo check --all-targets --locked`、`cargo audit` 與 `cargo deny check` |
 | `auto_build_release.yml` | push 到 `main`、手動觸發 | 讀取 `Cargo.toml` 版本；若 `v<版本>_Auto` 標籤不存在，建置 Windows（x86_64-pc-windows-gnu）與兩個 Linux musl（x86_64/aarch64）產物並建立 GitHub Release |
 
 推送 `main` 後會自動發布新版本。版本號以 `Cargo.toml` 的 `[package].version` 為準；發布前請同步更新 `Cargo.toml`、`Cargo.lock` 與 `doc/CLI.md` 的版本標註。
@@ -208,6 +208,7 @@ bash verify.sh quick
 cargo test --locked
 cargo clippy --all-targets --locked -- -D warnings
 cargo fmt --check
+cargo +1.87 check --all-targets --locked   # MSRV（先 rustup toolchain install 1.87）
 cargo audit
 cargo deny check
 ```
