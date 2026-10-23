@@ -98,7 +98,7 @@ fn bench_multi_algo_separate(c: &mut Criterion) {
 //  BLAKE3 bulk vs stream 比較
 // ──────────────────────────────────────────────────────────
 
-/// BLAKE3: bulk hash（blake3::hash 內部多線程）
+/// BLAKE3: bulk hash（`blake3::hash` 內部多線程）
 fn bench_blake3_bulk_100mb(c: &mut Criterion) {
     let data = vec![0u8; 100 * 1024 * 1024];
     c.bench_function("blake3_100mb_bulk", |b| {

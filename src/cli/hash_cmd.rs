@@ -23,7 +23,7 @@ pub struct HashArgs {
     #[arg(short, long, value_enum)]
     pub algo: Vec<HashAlgo>,
 
-    /// 輸出檔案路徑。省略時自動生成 `<dirname>.<algo_suffix>`。
+    /// 輸出檔案路徑。省略時在來源旁自動生成 `<dirname>.<algo_suffix>`。
     /// 指定 `-` 輸出到 stdout。
     #[arg(short, long, value_hint = clap::ValueHint::FilePath)]
     pub output: Option<PathBuf>,

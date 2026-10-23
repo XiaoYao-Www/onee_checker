@@ -24,11 +24,8 @@ pub fn list_files(path: &Path) -> io::Result<Vec<PathBuf>> {
         return Ok(entries);
     }
 
-    for entry in WalkDir::new(path)
-        .sort_by(|a, b| a.file_name().cmp(b.file_name()))
-        .into_iter()
-        .filter_map(std::result::Result::ok)
-    {
+    for entry in WalkDir::new(path).sort_by(|a, b| a.file_name().cmp(b.file_name())) {
+        let entry = entry.map_err(|error| io::Error::other(error.to_string()))?;
         if entry.file_type().is_file() {
             entries.push(entry.into_path());
         }

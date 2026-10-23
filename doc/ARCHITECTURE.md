@@ -224,14 +224,16 @@ pub fn compute_multi_hashes_parallel(
 
 | 層級 | 錯誤類型 | 處理方式 |
 |---|---|---|
-| 個別檔案 | `io::Error` | 包裝進 `OneeError::Io`，不中斷其他檔案 |
-| Hash 行解析 | `HashFileParseError` | 跳過該行，寫入 stderr 警告 |
+| 個別檔案 | `io::Error` | 記錄錯誤、繼續收集結果；命令最終回傳 exit code 2，hash 不寫出不完整檔案 |
+| Hash 行解析 | `HashFileParseError` | CLI 嚴格拒絕無效記錄，回傳 exit code 3 |
 | Path 驗證 | `InvalidPath` | 拒絕該路徑，記為 error |
 | 整體流程 | `HashMismatch` | 累積不匹配計數，最終 exit code 1 |
 | 致命錯誤 | `Io` / `Serde` | 立即退出，exit code 2 |
 
 ### Graceful Degradation
 
-- hash 檔中格式錯誤的行 → 跳過，繼續處理後續行
+- hash 檔中格式錯誤的行 → CLI 停止驗證並回報格式錯誤；library 的寬鬆 parser 保留相容行為
 - 個別檔案無法讀取 → 記錄錯誤，繼續處理其他檔案
 - 目錄中無檔案 → 警告但不報錯
+
+目錄 walker 不忽略 `walkdir` 錯誤，避免因權限或 I/O 問題漏掃檔案後仍生成成功結果。預設 checksum 檔放在來源旁，與 checksum 記錄採用的來源父目錄基準一致。

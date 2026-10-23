@@ -85,7 +85,7 @@ if !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
 
 - 僅接受 `0-9a-fA-F`
 - 拒絕空白、特殊字元、不可見字元
-- 格式錯誤的行被跳過，不中斷整體驗證
+- CLI 驗證會拒絕格式錯誤的行；不會跳過損壞資料後宣告成功
 
 ### Null byte 防護
 
@@ -181,7 +181,7 @@ if is_symlink {
 ### 錯誤處理
 
 - 所有錯誤透過 `OneeError` 枚舉處理，不在 `unwrap()` 或 `expect()` 上 panic
-- `parse_hash_file` 中的錯誤被記錄但不中斷流程（graceful degradation）
+- 相容用途的 `parse_hash_file` 保留跳過錯誤行的行為；CLI 驗證使用 `parse_hash_file_strict`
 
 ### Exit code 合規
 

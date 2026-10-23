@@ -11,7 +11,7 @@ use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
-/// 在暫存目錄中建立測試檔案，回傳 (dir, file_path)
+/// 在暫存目錄中建立測試檔案，回傳 `(dir, file_path)`
 fn setup_test_file() -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("建立暫存目錄失敗");
     let file_path = dir.path().join("hello.txt");
@@ -258,9 +258,8 @@ fn test_cli_hash_multi_algo_output_files() {
     let sha256_file = dir.path().parent().unwrap().join(format!("{dir_name}.sha256"));
     let blake3_file = dir.path().parent().unwrap().join(format!("{dir_name}.blake3-256"));
 
-    // 輸出檔在 cwd，不在 tmpdir 內，所以檢查存在性時需寬容
-    // 註：實際路徑取決於 cwd，這裡僅確認命令成功
-    assert!(true);
+    assert!(sha256_file.exists(), "SHA-256 清單應建立在來源目錄旁");
+    assert!(blake3_file.exists(), "BLAKE3 清單應建立在來源目錄旁");
 }
 
 // ──────────────────────────────────────────────────────────
@@ -286,17 +285,17 @@ fn test_cli_verify_roundtrip() {
     let dir_name = dir.path().file_name().unwrap().to_string_lossy();
     let hash_file = dir.path().parent().unwrap().join(format!("{dir_name}.sha256"));
 
-    if hash_file.exists() {
-        // Step 3: 驗證
-        let verify = Command::cargo_bin("oneechk")
-            .expect("cargo_bin 失敗")
-            .arg("verify")
-            .arg(&hash_file)
-            .arg("-q")
-            .assert();
+    assert!(hash_file.exists(), "預設 checksum 檔應建立在來源目錄旁");
 
-        verify.success();
-    }
+    // Step 3: 驗證
+    let verify = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("verify")
+        .arg(&hash_file)
+        .arg("-q")
+        .assert();
+
+    verify.success();
 }
 
 #[test]
@@ -335,6 +334,42 @@ fn test_cli_verify_mismatch_detected() {
 
     // 預期失敗：因為內容已變更
     verify.code(predicate::eq(1));
+}
+
+#[test]
+fn test_cli_verify_missing_file_returns_io_exit_code() {
+    let dir = TempDir::new().expect("建立暫存目錄失敗");
+    let hash_file = dir.path().join("checksums.sha256");
+    fs::write(
+        &hash_file,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 *missing.txt\n",
+    )
+    .expect("寫入 hash 檔失敗");
+
+    Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("verify")
+        .arg(&hash_file)
+        .arg("-q")
+        .assert()
+        .code(predicate::eq(2));
+}
+
+#[test]
+fn test_cli_verify_rejects_malformed_and_empty_manifests() {
+    let dir = TempDir::new().expect("建立暫存目錄失敗");
+    let hash_file = dir.path().join("checksums.sha256");
+
+    for content in ["invalid record\n", "# empty manifest\n"] {
+        fs::write(&hash_file, content).expect("寫入 hash 檔失敗");
+        Command::cargo_bin("oneechk")
+            .expect("cargo_bin 失敗")
+            .arg("verify")
+            .arg(&hash_file)
+            .arg("-q")
+            .assert()
+            .code(predicate::eq(3));
+    }
 }
 
 // ──────────────────────────────────────────────────────────
@@ -458,7 +493,7 @@ fn test_cli_hash_bad_buffer_size() {
         .arg("10B")
         .assert();
 
-    assert.failure().code(predicate::eq(2));
+    assert.failure().code(predicate::eq(3));
 }
 
 #[test]

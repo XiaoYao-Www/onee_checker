@@ -11,7 +11,7 @@ use rayon::{prelude::*, ThreadPool};
 
 use crate::algorithm::{HashData, HashType};
 use crate::error::OneeError;
-use crate::fs::{canonicalize_root, parse_hash_file, sanitize_rel_path};
+use crate::fs::{canonicalize_root, parse_hash_file_strict, sanitize_rel_path};
 use crate::hasher::{blake3_hash_bulk, HasherEnum};
 
 /// 從 `Read` 來源計算 hash（streaming）。
@@ -287,7 +287,10 @@ pub fn verify_hash_file(
         Err(e) => return vec![Err(e)],
     };
 
-    let entries = parse_hash_file(&content);
+    let entries = match parse_hash_file_strict(&content) {
+        Ok(entries) => entries,
+        Err(error) => return vec![Err(error)],
+    };
 
     entries
         .par_iter()
@@ -301,11 +304,9 @@ pub fn verify_hash_file(
                 };
                 match verify_file_hash(&full_path, &entry.hash_hex, hash_type, buf) {
                     Ok(true) => Ok((full_path, true, entry.hash_hex.clone())),
-                    Ok(false) => {
-                        let actual = compute_file_hash(&full_path, hash_type, buf)
-                            .map_or_else(|_| "ERR".into(), |b| hex::encode(&b));
-                        Ok((full_path, false, actual))
-                    }
+                    Ok(false) => compute_file_hash(&full_path, hash_type, buf)
+                        .map(|bytes| (full_path, false, hex::encode(&bytes)))
+                        .map_err(OneeError::Io),
                     Err(e) => Err(e),
                 }
             },
@@ -335,7 +336,10 @@ pub fn verify_hash_file_with_pool(
         Err(e) => return vec![Err(e)],
     };
 
-    let entries = parse_hash_file(&content);
+    let entries = match parse_hash_file_strict(&content) {
+        Ok(entries) => entries,
+        Err(error) => return vec![Err(error)],
+    };
 
     pool.install(|| {
         entries
@@ -350,11 +354,9 @@ pub fn verify_hash_file_with_pool(
                     };
                     match verify_file_hash(&full_path, &entry.hash_hex, hash_type, buf) {
                         Ok(true) => Ok((full_path, true, entry.hash_hex.clone())),
-                        Ok(false) => {
-                            let actual = compute_file_hash(&full_path, hash_type, buf)
-                                .map_or_else(|_| "ERR".into(), |b| hex::encode(&b));
-                            Ok((full_path, false, actual))
-                        }
+                        Ok(false) => compute_file_hash(&full_path, hash_type, buf)
+                            .map(|bytes| (full_path, false, hex::encode(&bytes)))
+                            .map_err(OneeError::Io),
                         Err(e) => Err(e),
                     }
                 },

@@ -216,8 +216,8 @@ jobs:
 
 ### 錯誤處理
 
-- Library 層: `thiserror` → `OneeError`
-- CLI 層: `OneeError::exit_code()` → `std::process::exit()`
+- Library 層: `thiserror` → `OneeError`；walker 回報遍歷錯誤，CLI 專用嚴格 hash parser 拒絕損壞記錄
+- CLI 層: `OneeError::exit_code()` → `std::process::exit()`；一般參數錯誤為 3，I/O 為 2，hash 不匹配為 1
 - 不應在 library 層直接 `eprintln!`（`parse_hash_file` 的 stderr 輸出為已知例外）
 
 ## 添加新演算法

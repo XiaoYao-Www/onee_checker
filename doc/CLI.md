@@ -40,7 +40,7 @@ oneechk hash [OPTIONS] <PATH>
 |---|---|---|---|---|---|
 | `<PATH>` | | | `PathBuf` | (必需) | 要計算的檔案或目錄路徑 |
 | `--algo` | `-a` | `--algo` | `HashAlgo[]` | `sha256` | 演算法，可多次指定 |
-| `--output` | `-o` | `--output` | `PathBuf` | auto | 輸出檔案。指定 `-` 輸出到 stdout |
+| `--output` | `-o` | `--output` | `PathBuf` | source sibling | 輸出檔案。指定 `-` 輸出到 stdout |
 | `--length` | | `--length` | `u16` | 預設值 | 可變長度演算法的輸出長度 (bytes) |
 | `--buffer` | | `--buffer` | `BufferSize` | `1M` | 讀取緩衝區大小 (支援 K/M/G 後綴) |
 | `--threads` | `-t` | `--threads` | `usize` | CPU cores | 並行線程數 |
@@ -110,7 +110,10 @@ oneechk hash ./large-dir --buffer 8K -t 4
 | 路徑不存在 | 3 | `無效路徑: 路徑不存在: <path>` |
 | 固定長度算法 + `--length` | 3 | `算法不支援自訂輸出長度: Sha256` |
 | 空目錄 | 0 | `⚠ 警告: 指定路徑下無任何檔案` |
+| 任何來源檔案無法讀取 | 2 | 顯示錯誤，且不寫出不完整 checksum 檔 |
 | 無法寫入輸出 | 2 | `I/O 錯誤: ...` |
+
+未指定 `--output` 時，checksum 檔建立在來源檔案或目錄旁，例如 `oneechk hash ./Downloads` 會產生 `./Downloads.sha256`。記錄中的相對路徑以來源的父目錄為根，因此可在該目錄執行 `oneechk verify Downloads.sha256`。
 
 ---
 
@@ -165,7 +168,7 @@ oneechk verify [OPTIONS] <HASHFILE>
 
 - **Path Traversal**: `../../etc/passwd` 型路徑會立即被拒絕
 - **絕對路徑**: `/etc/shadow` 型路徑會被拒絕
-- **非法 hex**: 非十六進位 hash 行被跳過並警告
+- **非法 hex**: 非十六進位 hash 行會被拒絕，驗證以格式錯誤結束
 
 ### 退出碼
 
@@ -175,6 +178,8 @@ oneechk verify [OPTIONS] <HASHFILE>
 | 1 | 至少一個檔案 hash 不匹配 |
 | 2 | I/O 錯誤 |
 | 3 | 參數錯誤 / hash 檔格式錯誤 |
+
+驗證清單中的每一筆非註解記錄都必須符合格式；損壞的記錄或沒有任何記錄的檔案會以 `3` 結束，不會略過後仍宣告驗證成功。逐檔讀取錯誤會回傳 `2`。若同時有讀取錯誤與 hash 不匹配，I/O 錯誤優先回傳 `2`。
 
 ---
 
@@ -268,6 +273,7 @@ oneechk txt [OPTIONS] <PATH>
 - 不顯示進度條 (`hash`)
 - 不顯示逐檔訊息 (`verify`, 僅顯示最終摘要)
 - 不顯示儲存成功訊息 (`json`, `txt`)
+- CLI 參數錯誤回傳 `3`；`--help`、`--version` 回傳 `0`
 
 ### stdout 輸出 (`-o -`)
 

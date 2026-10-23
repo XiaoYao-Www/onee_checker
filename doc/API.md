@@ -281,7 +281,10 @@ pub fn validate_path(path: &Path) -> Result<(), String>
 pub fn save_hash_file(data: &[HashData], output: &Path, root: &Path) -> io::Result<()>
 pub fn save_file_node_json(container: &FileNodeContainer, output: &Path) -> io::Result<()>
 pub fn parse_hash_file(content: &str) -> Vec<HashEntry>
+pub fn parse_hash_file_strict(content: &str) -> Result<Vec<HashEntry>>
 ```
+
+`parse_hash_file` 為相容用途保留寬鬆解析行為；嚴格版本遇到無效記錄、超過行數上限或空清單時回傳 `HashFileParseError`。CLI 與驗證 API 採嚴格解析。
 
 ### 安全防護
 
@@ -363,7 +366,7 @@ pub enum OneeError {
 
 | 方法 | 說明 |
 |---|---|
-| `exit_code() -> i32` | 0/1/2/3 對應 POSIX exit code |
+| `exit_code() -> i32` | 專案 CLI 契約：0 成功、1 hash 不匹配、2 I/O/執行錯誤、3 輸入/格式錯誤 |
 
 ### `Result<T>`
 

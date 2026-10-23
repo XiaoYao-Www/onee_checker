@@ -9,7 +9,7 @@ use thiserror::Error;
 
 /// ### 工具全域錯誤類型
 ///
-/// 每個變體綁定一個 POSIX 風格 exit code：
+/// 每個變體綁定本專案 CLI 契約的 exit code：
 /// - `0` — 成功
 /// - `1` — hash 不匹配（驗證失敗）
 /// - `2` — I/O 或內部錯誤
@@ -53,7 +53,7 @@ pub enum OneeError {
 }
 
 impl OneeError {
-    /// 根據錯誤類型回傳 POSIX exit code
+    /// 根據錯誤類型回傳本專案 CLI 契約的 exit code
     #[must_use]
     pub const fn exit_code(&self) -> i32 {
         match self {

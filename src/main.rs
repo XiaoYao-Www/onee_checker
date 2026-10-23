@@ -6,9 +6,8 @@
 //! 設計原則：
 //! - stdout → 機器可解析的資料（hash 檔內容、JSON、純文字樹）
 //! - stderr → 人類可讀的訊息（進度、錯誤、狀態）
-//! - exit code → 0=成功 1=hash不匹配 2=I/O錯誤 3=使用者錯誤
+//! - exit code → 0=成功 1=hash不匹配 2=執行/I/O錯誤 3=參數或格式錯誤
 
-use std::env;
 use std::fs::File;
 use std::io::{stdout, BufWriter, Write};
 use std::path::Path;
@@ -35,7 +34,19 @@ use onee_checker::tree::{write_tree, SizeFormat, TreeOption};
 use std::time::SystemTime;
 
 fn main() {
-    let cli = <Cli as clap::Parser>::parse();
+    let cli = match <Cli as clap::Parser>::try_parse() {
+        Ok(cli) => cli,
+        Err(error) => {
+            let exit_code = match error.kind() {
+                clap::error::ErrorKind::DisplayHelp
+                | clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+                | clap::error::ErrorKind::DisplayVersion => 0,
+                _ => 3,
+            };
+            let _ = error.print();
+            std::process::exit(exit_code);
+        }
+    };
 
     let result = match cli.command {
         Commands::Hash(args) => cmd_hash(args),
@@ -132,6 +143,7 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
             None => compute_multi_hashes_parallel(&files, &all_hash_types, buffer_size),
         };
 
+        let mut first_error = None;
         for (i, (_, hash_type)) in algos.iter().enumerate() {
             let mut hash_data: Vec<HashData> = Vec::with_capacity(files.len());
 
@@ -141,23 +153,35 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
                         hash_data.push(data.clone());
                     }
                     Err(e) => {
-                        eprintln!("{} 錯誤: {e}", style("✘").red());
+                        if first_error.is_none() {
+                            first_error = Some(OneeError::Io(std::io::Error::other(e.to_string())));
+                        }
+                        if i == 0 {
+                            eprintln!("{} 錯誤: {e}", style("✘").red());
+                        }
                     }
                 }
-                if let Some(ref bar) = pb {
-                    bar.inc(1);
+                if i == 0 {
+                    if let Some(ref bar) = pb {
+                        bar.inc(1);
+                    }
                 }
             }
 
             hash_data.sort_by(|a, b| a.path.cmp(&b.path));
-            save_hash_results(&hash_data, hash_type, path, args.output.as_ref())?;
+            if first_error.is_none() {
+                save_hash_results(&hash_data, hash_type, path, args.output.as_ref())?;
+            }
         }
 
         if let Some(bar) = pb {
             bar.finish_and_clear();
         }
 
-        return Ok(());
+        return match first_error {
+            Some(error) => Err(error),
+            None => Ok(()),
+        };
     }
 
     // ── 單一演算法：維持既有路徑 ──
@@ -186,6 +210,7 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
     };
     let mut hash_data: Vec<HashData> = Vec::with_capacity(results.len());
 
+    let mut first_error = None;
     for result in results {
         match result {
             Ok(data) => {
@@ -193,6 +218,9 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
             }
             Err(e) => {
                 eprintln!("{} 錯誤: {e}", style("✘").red());
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
             }
         }
         if let Some(ref bar) = pb {
@@ -204,6 +232,10 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
         bar.finish_and_clear();
     }
 
+    if let Some(error) = first_error {
+        return Err(error);
+    }
+
     hash_data.sort_by(|a, b| a.path.cmp(&b.path));
     save_hash_results(&hash_data, hash_type, path, args.output.as_ref())?;
 
@@ -211,9 +243,8 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
 }
 
 /// 將 hash 結果寫入 stdout
-fn write_hash_to_stdout(data: &[HashData], input_path: &Path, current_dir: &Path) -> Result<()> {
+fn write_hash_to_stdout(data: &[HashData], root: &Path) -> Result<()> {
     let mut stdout = BufWriter::new(stdout().lock());
-    let root = input_path.parent().unwrap_or(current_dir);
     for entry in data {
         let rel_path = entry.path.strip_prefix(root).unwrap_or(&entry.path);
         let path_str = rel_path.to_string_lossy().replace('\\', "/");
@@ -233,7 +264,11 @@ fn save_hash_results(
     path: &Path,
     output: Option<&PathBuf>,
 ) -> Result<()> {
-    let current_dir = env::current_dir().map_err(OneeError::Io)?;
+    let root = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        Some(_) => Path::new("."),
+        None => path,
+    };
     let default_name = format!(
         "{}.{}",
         path.file_name().unwrap_or_default().to_string_lossy(),
@@ -242,16 +277,16 @@ fn save_hash_results(
 
     match output {
         Some(out) if out.to_string_lossy() == "-" => {
-            write_hash_to_stdout(hash_data, path, &current_dir)?;
+            write_hash_to_stdout(hash_data, root)?;
         }
         Some(out) => {
             let out_path: &Path = out.as_path();
-            save_hash_file(hash_data, out_path, path.parent().unwrap_or(&current_dir))?;
+            save_hash_file(hash_data, out_path, root)?;
             eprintln!("{} 已儲存: {}", style("✔").green(), out.display());
         }
         None => {
-            let output_path = current_dir.join(&default_name);
-            save_hash_file(hash_data, &output_path, path.parent().unwrap_or(&current_dir))?;
+            let output_path = root.join(&default_name);
+            save_hash_file(hash_data, &output_path, root)?;
             eprintln!("{} 已儲存: {}", style("✔").green(), output_path.display());
         }
     }
@@ -325,8 +360,9 @@ fn cmd_verify(args: cli::VerifyArgs) -> Result<()> {
     let mut matched = 0usize;
     let mut mismatched = 0usize;
     let mut errors = 0usize;
+    let mut first_error = None;
 
-    for result in &results {
+    for result in results {
         total += 1;
         match result {
             Ok((path, true, _)) => {
@@ -346,6 +382,9 @@ fn cmd_verify(args: cli::VerifyArgs) -> Result<()> {
             Err(e) => {
                 errors += 1;
                 eprintln!("{} 錯誤: {e}", style("✘").red());
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
             }
         }
     }
@@ -354,6 +393,10 @@ fn cmd_verify(args: cli::VerifyArgs) -> Result<()> {
         "{} 驗證完成: {total} 個檔案, {matched} 匹配, {mismatched} 不匹配, {errors} 錯誤",
         if mismatched == 0 && errors == 0 { style("✔").green() } else { style("✘").red() }
     );
+
+    if let Some(error) = first_error {
+        return Err(error);
+    }
 
     if mismatched > 0 {
         return Err(OneeError::HashMismatch {
@@ -389,7 +432,7 @@ fn cmd_json(args: cli::JsonArgs) -> Result<()> {
         nodes: vec![node],
     };
 
-    let current_dir = env::current_dir().map_err(OneeError::Io)?;
+    let current_dir = std::env::current_dir().map_err(OneeError::Io)?;
     let default_name =
         format!("{}.{}", path.file_name().unwrap_or_default().to_string_lossy(), "struct.json");
 
@@ -436,7 +479,7 @@ fn cmd_txt(args: cli::TxtArgs) -> Result<()> {
     let option =
         TreeOption { size: size_format, last_modified: args.modified, created_at: args.created };
 
-    let current_dir = env::current_dir().map_err(OneeError::Io)?;
+    let current_dir = std::env::current_dir().map_err(OneeError::Io)?;
     let default_name =
         format!("{}.{}", path.file_name().unwrap_or_default().to_string_lossy(), "tree.txt");
 

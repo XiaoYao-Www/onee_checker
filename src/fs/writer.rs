@@ -213,6 +213,56 @@ pub fn parse_hash_file(content: &str) -> Vec<HashEntry> {
         .collect()
 }
 
+/// 嚴格解析 hash 驗證檔；任何非註解的無效記錄都會中止解析。
+///
+/// CLI 驗證使用此版本，避免跳過損壞記錄後仍回報成功。寬鬆的
+/// [`parse_hash_file`] 保留供既有 library 使用者相容。
+pub fn parse_hash_file_strict(content: &str) -> Result<Vec<HashEntry>> {
+    let mut entries = Vec::new();
+    for (index, line) in content.lines().enumerate() {
+        if index >= MAX_HASH_LINES {
+            return Err(OneeError::HashFileParseError {
+                line: index + 1,
+                detail: format!("超過最大行數 {MAX_HASH_LINES}"),
+            });
+        }
+
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let Some(space_pos) = line.find(' ') else {
+            return Err(OneeError::HashFileParseError {
+                line: index + 1,
+                detail: "缺少 hash 與路徑之間的分隔空格".into(),
+            });
+        };
+        let hash_part = &line[..space_pos];
+        let rest = &line[space_pos + 1..];
+        let path_part = if let Some(path) = rest.strip_prefix('*') {
+            path
+        } else if let Some(path) = rest.strip_prefix(' ') {
+            path
+        } else {
+            rest
+        };
+
+        let entry = HashEntry::new(hash_part, path_part).map_err(|error| {
+            OneeError::HashFileParseError { line: index + 1, detail: error.to_string() }
+        })?;
+        entries.push(entry);
+    }
+
+    if entries.is_empty() {
+        return Err(OneeError::HashFileParseError {
+            line: 0,
+            detail: "沒有可驗證的 hash 記錄".into(),
+        });
+    }
+    Ok(entries)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
