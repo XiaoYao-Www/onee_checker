@@ -316,8 +316,8 @@ d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592  file2.txt
 
     #[test]
     fn test_parse_empty() {
-        assert!(parse_hash_file("").is_empty());
-        assert!(parse_hash_file("# only comments").is_empty());
+        assert_eq!(parse_hash_file(""), Vec::<HashEntry>::new());
+        assert_eq!(parse_hash_file("# only comments"), Vec::<HashEntry>::new());
     }
 
     #[test]
