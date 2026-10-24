@@ -344,8 +344,12 @@ fn cmd_verify(args: cli::VerifyArgs, format: onee_checker::report::OutputFormat)
             .to_hash_type(None)?
     };
 
-    let root_dir: PathBuf =
-        args.root.unwrap_or_else(|| hashfile.parent().unwrap_or(Path::new(".")).to_path_buf());
+    let root_dir: PathBuf = args.root.unwrap_or_else(|| match hashfile.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
+        _ => PathBuf::from("."),
+    });
+    // 統一為絕對路徑，確保 entry 路徑可正確轉成相對路徑（否則會出現 \\?\ 絕對路徑）
+    let canonical_root = root_dir.canonicalize().unwrap_or_else(|_| root_dir.clone());
 
     // 先嚴格驗證 manifest：格式錯誤或無有效項目屬於輸入錯誤（exit 3）
     let content = std::fs::read_to_string(hashfile).map_err(OneeError::Io)?;
@@ -356,6 +360,10 @@ fn cmd_verify(args: cli::VerifyArgs, format: onee_checker::report::OutputFormat)
             detail: "manifest 沒有有效項目".into(),
         });
     }
+    let expected_map: std::collections::HashMap<String, String> = parsed_entries
+        .iter()
+        .map(|entry| (entry.rel_path.replace('\\', "/"), entry.hash_hex.to_lowercase()))
+        .collect();
 
     if !args.quiet {
         eprintln!(
@@ -386,9 +394,13 @@ fn cmd_verify(args: cli::VerifyArgs, format: onee_checker::report::OutputFormat)
         match result {
             Ok((path, matched, actual)) => {
                 let status = if matched { EntryStatus::Match } else { EntryStatus::Mismatch };
-                let rel =
-                    path.strip_prefix(&root_dir).unwrap_or(&path).to_string_lossy().into_owned();
-                let mut entry = EntryReport::new(rel, status);
+                let rel = path
+                    .strip_prefix(&canonical_root)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let mut entry = EntryReport::new(rel.clone(), status);
+                entry.expected = expected_map.get(&rel).cloned();
                 entry.actual = Some(actual);
                 entries.push(entry);
             }
@@ -411,11 +423,11 @@ fn cmd_verify(args: cli::VerifyArgs, format: onee_checker::report::OutputFormat)
     }
 
     let mut report = VerifyReport {
-        version: "2.1.0".into(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
         command: "verify".into(),
         hashfile: hashfile.to_string_lossy().into_owned(),
         algorithm: hash_type.display_name().into(),
-        root: root_dir.to_string_lossy().into_owned(),
+        root: canonical_root.to_string_lossy().trim_start_matches("\\\\?\\").to_string(),
         summary: onee_checker::report::VerifySummary::from_entries(&entries),
         exit_code: 0,
         entries,
@@ -483,7 +495,7 @@ fn cmd_json(args: cli::JsonArgs) -> Result<()> {
 
     let node = build_file_node(path)?;
     let container = FileNodeContainer {
-        version: String::from("0.1.0"),
+        version: env!("CARGO_PKG_VERSION").to_string(),
         generation_time: onee_checker::fs::to_unix_timestamp(SystemTime::now()),
         nodes: vec![node],
     };
