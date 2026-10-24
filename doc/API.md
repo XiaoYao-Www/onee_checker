@@ -2,7 +2,7 @@
 
 Onee Checker 可作為 Rust library (`onee_checker`) 嵌入其他專案。公開 API 透過 `onee_checker::prelude::*` 匯出。
 
-> 本文對應版本 **2.1.0**。2.1.0 新增 `report`（輸出契約）與 `manifest`（清單解析／比對）兩個模組，
+> 本文對應版本 **2.1.1**。2.1.0 新增 `report`（輸出契約）與 `manifest`（清單解析／比對）兩個模組，
 > 並在 `OneeError` 加入 `NothingToDo`（CLI 退出碼 4）。
 
 ---
@@ -83,7 +83,7 @@ pub struct HashData {
 | `hash_hex()` | 回傳 hex 字串 (分配新 String) |
 | `hash_hex_into(&mut String)` | 將 hex 寫入外部緩衝區 (零 alloc) |
 
-### `HashMode`（2.1.0 之後新增）
+### `HashMode`（2.1.1 新增）
 
 ```rust
 pub enum HashMode { Text, Binary }   // Default = Text

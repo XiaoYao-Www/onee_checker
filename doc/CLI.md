@@ -1,6 +1,6 @@
 # Onee Checker 指令參考手冊
 
-**版本**：2.1.0 ｜ **執行檔名稱**：`oneechk`
+**版本**：2.1.1 ｜ **執行檔名稱**：`oneechk`
 
 本文件是 `oneechk` 的完整指令參考。想循序學習，請看 [TUTORIAL.md](TUTORIAL.md)；
 想了解輸出欄位與程式設計介面，請看 [API.md](API.md)。
@@ -209,7 +209,7 @@ oneechk json <PATH> [-o <OUTPUT>] [-q]
 
 ```json
 {
-  "version": "2.1.0",
+  "version": "2.1.1",
   "generation_time": 1790000000,
   "nodes": [
     { "name": "data", "path": "data", "is_dir": true, "children": [] }
@@ -307,7 +307,7 @@ sha-256 (data/a.txt) = 8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8
 
 ```json
 {
-  "version": "2.1.0",
+  "version": "2.1.1",
   "command": "verify",
   "hashfile": "data.sha256",
   "algorithm": "SHA-256",

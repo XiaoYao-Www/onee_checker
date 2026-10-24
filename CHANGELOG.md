@@ -3,7 +3,7 @@
 本專案遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。
 版本號格式：`MAJOR.MINOR.PATCH`；CLI 的退出碼與輸出格式屬於公開契約。
 
-## [未發佈]
+## [2.1.1] - 2026-10-24
 
 ### 新增
 

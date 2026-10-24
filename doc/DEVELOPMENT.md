@@ -192,8 +192,8 @@ bash verify.sh quick
 
 | 層級 | 數量 | 說明 |
 |---|---|---|
-| 單元測試 | 55 | 各模組函數正確性（含 report / manifest） |
-| 整合測試 | 33 | CLI 端到端（所有演算法、多演算法、驗證、check/diff、退出碼、邊界條件） |
+| 單元測試 | 57 | 各模組函數正確性（含 report / manifest / HashMode） |
+| 整合測試 | 37 | CLI 端到端（所有演算法、多演算法、驗證、check/diff、模式切換、退出碼、邊界條件） |
 | doc 測試 | 2 | README / lib 文件範例 |
 | 基準測試 | 7 | 演算法效能、多演算法、BLAKE3 多線程比較 |
 

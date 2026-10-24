@@ -1,122 +1,122 @@
-# 依賴?��?審�??��?
+# 依賴授權審計報告
 
-**專�?**: onee_checker v2.1.0  
-**專�??��?**: MIT (with trademark retention)  
-**審�??��?**: 2026-06-02  
+**專案**: onee_checker v2.1.1  
+**專案授權**: MIT (with trademark retention)  
+**審計日期**: 2026-06-02  
 
 ---
 
-## ?�接依賴 (21)
+## 直接依賴 (21)
 
-| 依賴 | ?�本 | ?��? | SPDX | ??MIT ?�容 | ?�署�? | ?��??��? |
+| 依賴 | 版本 | 授權 | SPDX | 與 MIT 相容 | 需署名 | 處理方式 |
 |---|---|---|---|---|---|---|
-| **clap** | 4.6.1 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **indicatif** | 0.18.4 | MIT | MIT | ??| ??| ?��??��? |
-| **console** | 0.16.3 | MIT | MIT | ??| ??| ?��??��? |
-| **thiserror** | 2 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **anyhow** | 1 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **md-5** | 0.11.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **sha-1** | 0.10.1 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **sha2** | 0.11.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **sha3** | 0.11.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **blake2** | 0.10.6 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **blake3** | 1.8.5 | CC0-1.0 OR Apache-2.0 | CC0-1.0 / Apache-2.0 | ??| ??| NOTICE 中註??BLAKE3 ?��??��? |
-| **serde** | 1.0.228 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **serde_json** | 1.0.149 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **walkdir** | 2.5.0 | MIT OR Unlicense | MIT / Unlicense | ??| ??| ?��??��? |
-| **rayon** | 1.12.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **hex** | 0.4.3 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **chrono** | 0.4.44 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ?��??��? |
-| **criterion** ??| 0.5.1 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ??dev-dependency，�?影響??? |
-| **assert_cmd** ??| 2.2.2 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ??dev-dependency，�?影響??? |
-| **predicates** ??| 3.1.4 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ??dev-dependency |
-| **tempfile** ??| 3.27.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ??| ??| ??dev-dependency |
+| **clap** | 4.6.1 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **indicatif** | 0.18.4 | MIT | MIT | ✅ | ❌ | 無需操作 |
+| **console** | 0.16.3 | MIT | MIT | ✅ | ❌ | 無需操作 |
+| **thiserror** | 2 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **anyhow** | 1 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **md-5** | 0.11.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **sha-1** | 0.10.1 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **sha2** | 0.11.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **sha3** | 0.11.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **blake2** | 0.10.6 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **blake3** | 1.8.5 | CC0-1.0 OR Apache-2.0 | CC0-1.0 / Apache-2.0 | ✅ | ✅ | NOTICE 中註明 BLAKE3 團隊版權 |
+| **serde** | 1.0.228 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **serde_json** | 1.0.149 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **walkdir** | 2.5.0 | MIT OR Unlicense | MIT / Unlicense | ✅ | ❌ | 無需操作 |
+| **rayon** | 1.12.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **hex** | 0.4.3 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **chrono** | 0.4.44 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 無需操作 |
+| **criterion** Ⓓ | 0.5.1 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 僅 dev-dependency，不影響散佈 |
+| **assert_cmd** Ⓓ | 2.2.2 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 僅 dev-dependency，不影響散佈 |
+| **predicates** Ⓓ | 3.1.4 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 僅 dev-dependency |
+| **tempfile** Ⓓ | 3.27.0 | MIT OR Apache-2.0 | MIT / Apache-2.0 | ✅ | ❌ | 僅 dev-dependency |
 
-> ??= dev-dependency，�??�測�??��??�使?��?不�??��?終�??��?
-
----
-
-## ?��??��???
-
-```
-MIT OR Apache-2.0  ?��??��??��??��??��??��??��??��??��?  17 (81%)
-CC0-1.0            ??                  1  (5%)
-MIT                ?��?                  2 (9%)
-MIT OR Unlicense   ??                  1  (5%)
-```
+> Ⓓ = dev-dependency，僅在測試/基準時使用，不納入最終二進位
 
 ---
 
-## ?��?依賴審�??��?
+## 授權分布圖
 
-以�???Cargo �???��??�鍵?��?依賴?��?權�?
+```
+MIT OR Apache-2.0  ██████████████████  17 (81%)
+CC0-1.0            █                   1  (5%)
+MIT                ██                  2 (9%)
+MIT OR Unlicense   ▏                   1  (5%)
+```
 
-| ?��?依賴 | ?��? | ?�容 |
+---
+
+## 傳遞依賴審計摘要
+
+以下為 Cargo 解析出的關鍵傳遞依賴及授權：
+
+| 傳遞依賴 | 授權 | 相容 |
 |---|---|---|
-| `proc-macro2` | MIT OR Apache-2.0 | ??|
-| `quote` | MIT OR Apache-2.0 | ??|
-| `syn` | MIT OR Apache-2.0 | ??|
-| `unicode-ident` | MIT OR Apache-2.0 OR Unicode-3.0 | ??|
-| `libc` | MIT OR Apache-2.0 | ??|
-| `crossbeam-*` | MIT OR Apache-2.0 | ??|
-| `regex-*` | MIT OR Apache-2.0 | ??|
-| `memchr` | MIT OR Unlicense | ??|
-| `digest` | MIT OR Apache-2.0 | ??|
-| `crypto-common` | MIT OR Apache-2.0 | ??|
-| `block-buffer` | MIT OR Apache-2.0 | ??|
-| `cpufeatures` | MIT OR Apache-2.0 | ??|
-| `keccak` | CC0-1.0 | ??|
-| `generic-array` | MIT | ??|
-| `typenum` | MIT OR Apache-2.0 | ??|
-| `arrayref` | BSD-2-Clause | ??|
-| `constant_time_eq` | CC0-1.0 | ??|
+| `proc-macro2` | MIT OR Apache-2.0 | ✅ |
+| `quote` | MIT OR Apache-2.0 | ✅ |
+| `syn` | MIT OR Apache-2.0 | ✅ |
+| `unicode-ident` | MIT OR Apache-2.0 OR Unicode-3.0 | ✅ |
+| `libc` | MIT OR Apache-2.0 | ✅ |
+| `crossbeam-*` | MIT OR Apache-2.0 | ✅ |
+| `regex-*` | MIT OR Apache-2.0 | ✅ |
+| `memchr` | MIT OR Unlicense | ✅ |
+| `digest` | MIT OR Apache-2.0 | ✅ |
+| `crypto-common` | MIT OR Apache-2.0 | ✅ |
+| `block-buffer` | MIT OR Apache-2.0 | ✅ |
+| `cpufeatures` | MIT OR Apache-2.0 | ✅ |
+| `keccak` | CC0-1.0 | ✅ |
+| `generic-array` | MIT | ✅ |
+| `typenum` | MIT OR Apache-2.0 | ✅ |
+| `arrayref` | BSD-2-Clause | ✅ |
+| `constant_time_eq` | CC0-1.0 | ✅ |
 
 ---
 
 ## 風險評估
 
-### ???�風??
+### ✅ 無風險
 
-- **??GPL / AGPL / LGPL ?��?** ???�個�?賴樹不含任�? copyleft ?��?
-- **??MPL / CDDL / EPL** ???�弱 copyleft
-- **?�?��?權�???MIT ?�容** ???��?�?
+- **無 GPL / AGPL / LGPL 相依** — 整個依賴樹不含任何 copyleft 授權
+- **無 MPL / CDDL / EPL** — 無弱 copyleft
+- **所有授權均與 MIT 相容** — 無衝突
 
-### ?��? ?�注�?
+### ⚠️ 需注意
 
-| 依賴 | 注�?事�? |
+| 依賴 | 注意事項 |
 |---|---|
-| **blake3** | CC0-1.0 ?�部?�司法管轄�?（�?德�??��??��?不承認公?��??�放棄。建議在 NOTICE 中�???BLAKE3 ?��??��?權聲??|
-| **keccak** (sha3 ?��?依賴) | ?�為 CC0-1.0，無?�額�??��? |
-| **arrayref** | BSD-2-Clause 要�??�散佈�?保�??��??��??��?責聲?�。�??�編譯�??��?????��??��?，無?�額�??��? |
+| **blake3** | CC0-1.0 在部分司法管轄區（如德國、法國）不承認公共領域放棄。建議在 NOTICE 中保留 BLAKE3 團隊的版權聲明 |
+| **keccak** (sha3 傳遞依賴) | 同為 CC0-1.0，無需額外操作 |
+| **arrayref** | BSD-2-Clause 要求在散佈時保留版權聲明及免責聲明。作為編譯時靜態連結的二進位，無需額外操作 |
 
-### 已執行�??��??��?
+### 已執行的合規操作
 
-| ?��? | ?�??|
+| 操作 | 狀態 |
 |---|---|
-| ??LICENSE ?�為 MIT | 完�? |
-| ??NOTICE ?��?標�???+ RustCrypto/BLAKE3 署�? | 完�? |
-| ??Cargo.toml `license = "MIT"` | 已正�?|
-| ??README License 章�??�新 | 完�? |
+| ✅ LICENSE 改為 MIT | 完成 |
+| ✅ NOTICE 含商標保留 + RustCrypto/BLAKE3 署名 | 完成 |
+| ✅ Cargo.toml `license = "MIT"` | 已正確 |
+| ✅ README License 章節更新 | 完成 |
 
 ---
 
-## ?��?說�?
+## 商標說明
 
-?��?案�? MIT ?��??�涵?��?式碼?��?作�??�以下為作者�??��??��?權�?
+本專案的 MIT 授權僅涵蓋程式碼的著作權。以下為作者保留的商標權：
 
-| ?�稱 | 類�? | ?�制 |
+| 名稱 | 類型 | 限制 |
 |---|---|---|
-| "Onee Checker" | 專�??�稱 | 衍�?作�??�更??|
-| "oneechk" | 二進�??�稱 | ?�支/衍�?二進�??�更??|
+| "Onee Checker" | 專案名稱 | 衍生作品須更名 |
+| "oneechk" | 二進位名稱 | 分支/衍生二進位須更名 |
 
-任�?衍�?作�??��??��??��?
-1. 使用不�??��?案�?稱�?二進�??�稱
-2. ??README 中�?楚�?示為衍�?作�?
-3. 保�??��?作�?(?��? / XiaoYao) ?�署?��?�?LICENSE ??NOTICE ?�載�?
+任意衍生作品或分支必須：
+1. 使用不同的專案名稱和二進位名稱
+2. 在 README 中清楚標示為衍生作品
+3. 保留原始作者 (逍遙 / XiaoYao) 的署名（如 LICENSE 及 NOTICE 所載）
 
 ---
 
-## ?�考�???
+## 參考資料
 
 - [SPDX License List](https://spdx.org/licenses/)
 - [RustCrypto Licenses](https://github.com/RustCrypto)

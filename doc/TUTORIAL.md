@@ -15,7 +15,7 @@ oneechk --version
 ```
 
 ```text
-oneechk 2.1.0
+oneechk 2.1.1
 ```
 
 準備一個練習目錄：
@@ -202,7 +202,7 @@ oneechk json ./dist -o -
 
 ```json
 {
-  "version": "2.1.0",
+  "version": "2.1.1",
   "generation_time": 1792821395,
   "nodes": [
     {
