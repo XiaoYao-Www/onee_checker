@@ -3,7 +3,7 @@
 
 [package]
 name = "onee_checker"
-version = "2.0.3"
+version = "2.1.0"
 rust-version = "1.87"
 edition = "2021"
 description = "A professional hash verification & directory structure tool — library and CLI"

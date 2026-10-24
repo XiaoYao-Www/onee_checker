@@ -67,27 +67,34 @@ cargo deny check
 onee_checker/
 ├── Cargo.toml
 ├── README.md
+├── CHANGELOG.md            # 版本變更記錄
 ├── LICENSE
 ├── doc/                    # 詳細文件
+│   ├── TUTORIAL.md         # 循序教學
 │   ├── CLI.md              # CLI 指令參考
 │   ├── API.md              # Library API 參考
-│   ├── SECURITY.md         # 安全性設計
 │   ├── ARCHITECTURE.md     # 架構文件
+│   ├── OPTIMIZATION.md     # 效能調校
+│   ├── SECURITY.md         # 安全性設計
 │   ├── DEVELOPMENT.md      # 本文件
 │   ├── DESIGN-PLAN.md      # 設計規劃
 │   ├── COPYRIGHT-AUDIT.md  # 授權稽核
 │   └── LICENSE-AUDIT.md    # 授權條款稽核
 ├── src/
 │   ├── lib.rs              # Library 公開 API + prelude
-│   ├── main.rs             # CLI 入口
+│   ├── main.rs             # CLI 入口（dispatch → exit code）
 │   ├── algorithm.rs        # HashType / HashAlgo / HashData / BufferSize
 │   ├── error.rs            # OneeError (thiserror)
 │   ├── hash.rs             # 雜湊計算引擎
 │   ├── tree.rs             # 樹狀文字輸出
+│   ├── report.rs           # 輸出契約（v2.1.0 新增）
+│   ├── manifest.rs         # 清單偵測／解析／diff（v2.1.0 新增）
 │   ├── cli/                # Clap 參數定義
 │   │   ├── mod.rs
 │   │   ├── hash_cmd.rs
 │   │   ├── verify_cmd.rs
+│   │   ├── check_cmd.rs    # v2.1.0 新增
+│   │   ├── diff_cmd.rs     # v2.1.0 新增
 │   │   ├── json_cmd.rs
 │   │   └── txt_cmd.rs
 │   ├── fs/                 # 檔案系統操作
@@ -105,8 +112,11 @@ onee_checker/
 │       ├── sha3_hasher.rs
 │       ├── blake2_hasher.rs
 │       └── blake3_hasher.rs
-└── TEST/                   # 測試資料 (879 檔案)
+└── TEST/                   # 測試資料（約 700 個 .m4a；勿在 CI 逐檔列舉）
 ```
+
+> `TEST/` 內含大量二進位素材，遞迴列舉會產生極大的輸出；本機驗證請使用 `verify.sh`，
+> 或先用小目錄建立暫存資料。
 
 ## 編譯優化
 
@@ -182,9 +192,14 @@ bash verify.sh quick
 
 | 層級 | 數量 | 說明 |
 |---|---|---|
-| 單元測試 | 37 | 各模組函數正確性 |
-| 整合測試 | 25 | CLI 端到端（所有演算法、多演算法、驗證、邊界條件） |
+| 單元測試 | 55 | 各模組函數正確性（含 report / manifest） |
+| 整合測試 | 33 | CLI 端到端（所有演算法、多演算法、驗證、check/diff、退出碼、邊界條件） |
+| doc 測試 | 2 | README / lib 文件範例 |
 | 基準測試 | 7 | 演算法效能、多演算法、BLAKE3 多線程比較 |
+
+> 在 DSH 之類的沙箱環境執行測試時，若 `%TEMP%` 位於不可寫位置，`std::env::temp_dir()`
+> 相關測試會假失敗。先把 `TEMP` 指到工作區內：
+> `$env:TEMP="$PWD\target\_tmp"; $env:TMP=$env:TEMP`。
 
 ### 新增測試
 
@@ -197,10 +212,11 @@ bash verify.sh quick
 
 | Workflow | 觸發條件 | 內容 |
 |---|---|---|
-| `ci.yml` | 所有分支 push、PR 到 `main` | 三平台（ubuntu/windows/macos）`cargo test --locked`、`cargo clippy --all-targets -- -D warnings`、`cargo fmt --check`；另有 MSRV（1.87）`cargo check --all-targets --locked`、`cargo audit` 與 `cargo deny check` |
-| `auto_build_release.yml` | push 到 `main`、手動觸發 | 讀取 `Cargo.toml` 版本；若 `v<版本>_Auto` 標籤不存在，建置 Windows（x86_64-pc-windows-gnu）與兩個 Linux musl（x86_64/aarch64）產物並建立 GitHub Release |
+| `ci.yml` | 所有分支 push、PR 到 `main` | 三平台（ubuntu/windows/macos）`cargo test --locked`、`cargo clippy --all-targets -- -D warnings`、`cargo fmt --check`、`cargo doc --no-deps`（`RUSTDOCFLAGS=-D warnings`）；另有 MSRV（1.87）`cargo check --all-targets --locked`、`cargo audit` 與 `cargo deny check` |
+| `auto_build_release.yml` | push 到 `main`、手動觸發 | 讀取 `Cargo.toml` 版本；若 `v<版本>_Auto` 標籤不存在，先跑 `cargo test --release` 再建置 Windows（x86_64-pc-windows-gnu）與兩個 Linux musl（x86_64/aarch64）產物，打包成 `oneechk-<版本>-<target>.zip` 並建立 GitHub Release |
 
-推送 `main` 後會自動發布新版本。版本號以 `Cargo.toml` 的 `[package].version` 為準；發布前請同步更新 `Cargo.toml`、`Cargo.lock` 與 `doc/CLI.md` 的版本標註。
+推送 `main` 後會自動發布新版本。版本號以 `Cargo.toml` 的 `[package].version` 為準；發布前請同步更新
+`Cargo.toml`、`Cargo.lock`、`CHANGELOG.md` 與 `doc/CLI.md` 的版本標註。
 
 ### 本機重現 CI
 
@@ -208,6 +224,7 @@ bash verify.sh quick
 cargo test --locked
 cargo clippy --all-targets --locked -- -D warnings
 cargo fmt --check
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --locked
 cargo +1.87 check --all-targets --locked   # MSRV（先 rustup toolchain install 1.87）
 cargo audit
 cargo deny check

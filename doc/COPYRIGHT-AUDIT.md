@@ -1,37 +1,37 @@
-# 版權合規審計報告
+# ?��??��?審�??��?
 
-**專案**: onee_checker v2.0.1  
-**審計日期**: 2026-06-02  
-**執行者**: license-compliance-advisor (automated)  
-
----
-
-## 審計範圍
-
-| 類別 | 檢查項目 | 狀態 |
-|---|---|---|
-| **專案授權** | LICENSE 文件正確性 | ✅ MIT |
-| **專案授權** | Cargo.toml `license` 欄位 | ✅ MIT |
-| **原始碼** | 所有 `.rs` 檔案含版權標頭 | ✅ 24/24 |
-| **原始碼** | SPDX-License-Identifier | ✅ SPDX: MIT |
-| **第三方依賴** | 授權相容性 | ✅ 全部 MIT/Apache-2.0/CC0 相容 |
-| **第三方依賴** | 署名合規 | ✅ NOTICE 含 RustCrypto/BLAKE3 |
-| **商標** | 商標宣告 | ✅ NOTICE |
-| **測試資料** | TEST/ 目錄版權 | ⚠️ 含第三方版權內容 |
-| **README** | 版權宣告 | ✅ |
-| **Cargo.toml** | 元數據完整性 | ✅ |
+**專�?**: onee_checker v2.1.0  
+**審�??��?**: 2026-06-02  
+**?��???*: license-compliance-advisor (automated)  
 
 ---
 
-## 1. 專案授權 — ✅ PASS
+## 審�?範�?
 
-| 檔案 | 內容 | 狀態 |
+| 類別 | 檢查?�目 | ?�??|
 |---|---|---|
-| `LICENSE` | MIT License, Copyright (c) 2026 逍遙 (XiaoYao) | ✅ |
-| `Cargo.toml` | `license = "MIT"` | ✅ |
-| `NOTICE` | 商標保留 + 第三方署名 | ✅ |
+| **專�??��?** | LICENSE ?�件�?��??| ??MIT |
+| **專�??��?** | Cargo.toml `license` 欄�? | ??MIT |
+| **?��?�?* | ?�??`.rs` 檔�??��?權�???| ??24/24 |
+| **?��?�?* | SPDX-License-Identifier | ??SPDX: MIT |
+| **第�??��?�?* | ?��??�容??| ???�部 MIT/Apache-2.0/CC0 ?�容 |
+| **第�??��?�?* | 署�??��? | ??NOTICE ??RustCrypto/BLAKE3 |
+| **?��?** | ?��?�?? | ??NOTICE |
+| **測試資�?** | TEST/ ?��??��? | ?��? ?�第三方?��??�容 |
+| **README** | ?��?�?? | ??|
+| **Cargo.toml** | ?�數?��??��?| ??|
 
-### Cargo.toml 元數據
+---
+
+## 1. 專�??��? ????PASS
+
+| 檔�? | ?�容 | ?�??|
+|---|---|---|
+| `LICENSE` | MIT License, Copyright (c) 2026 ?��? (XiaoYao) | ??|
+| `Cargo.toml` | `license = "MIT"` | ??|
+| `NOTICE` | ?��?保�? + 第�??�署??| ??|
+
+### Cargo.toml ?�數??
 
 ```toml
 [package]
@@ -43,116 +43,116 @@ categories = ["command-line-utilities", "cryptography", "filesystem"]
 
 ---
 
-## 2. 原始碼版權標頭 — ✅ PASS
+## 2. ?��?碼�?權�???????PASS
 
-所有 24 個 `.rs` 原始碼檔案及 1 個整合測試檔 (`tests/cli_integration.rs`) 均包含以下版權標頭：
+?�??24 ??`.rs` ?��?碼�?案�? 1 ?�整?�測試�? (`tests/cli_integration.rs`) ?��??�以下�?權�??��?
 
 ```rust
-// Copyright (c) 2026 逍遙 (XiaoYao). Licensed under the MIT license.
+// Copyright (c) 2026 ?��? (XiaoYao). Licensed under the MIT license.
 // SPDX-License-Identifier: MIT
 ```
 
-| 目錄 | 檔案數 | 狀態 |
+| ?��? | 檔�???| ?�??|
 |---|---|---|
-| `src/` | 6 (main, lib, error, algorithm, hash, tree) | ✅ |
-| `src/cli/` | 5 (mod, hash_cmd, verify_cmd, json_cmd, txt_cmd) | ✅ |
-| `src/fs/` | 5 (mod, node, walker, writer, path_safe) | ✅ |
-| `src/hasher/` | 8 (mod, enum_hasher, md5, sha1, sha2, sha3, blake2, blake3) | ✅ |
-| `tests/` | 1 (cli_integration.rs) | ✅ |
-| `benches/` | 1 (hash_benchmark.rs) | ✅ |
+| `src/` | 6 (main, lib, error, algorithm, hash, tree) | ??|
+| `src/cli/` | 5 (mod, hash_cmd, verify_cmd, json_cmd, txt_cmd) | ??|
+| `src/fs/` | 5 (mod, node, walker, writer, path_safe) | ??|
+| `src/hasher/` | 8 (mod, enum_hasher, md5, sha1, sha2, sha3, blake2, blake3) | ??|
+| `tests/` | 1 (cli_integration.rs) | ??|
+| `benches/` | 1 (hash_benchmark.rs) | ??|
 
 ---
 
-## 3. 第三方依賴授權 — ✅ PASS
+## 3. 第�??��?賴�?�?????PASS
 
-### 相容性評估
+### ?�容?��?�?
 
-| 依賴數量 | 授權類型 | MIT 相容 |
+| 依賴?��? | ?��?類�? | MIT ?�容 |
 |---|---|---|
-| 17 | MIT OR Apache-2.0 | ✅ |
-| 2 | MIT | ✅ |
-| 1 | CC0-1.0 OR Apache-2.0 (blake3, `rayon` feature) | ✅ |
-| 1 | MIT OR Unlicense (walkdir) | ✅ |
+| 17 | MIT OR Apache-2.0 | ??|
+| 2 | MIT | ??|
+| 1 | CC0-1.0 OR Apache-2.0 (blake3, `rayon` feature) | ??|
+| 1 | MIT OR Unlicense (walkdir) | ??|
 
-### 署名狀態
+### 署�??�??
 
-| 第三方 | 署名位置 |
+| 第�???| 署�?位置 |
 |---|---|
 | RustCrypto Developers (md-5, sha-1, sha2, sha3, blake2) | `NOTICE` § RustCrypto Hashes |
 | Jack O'Connor / BLAKE3 team | `NOTICE` § BLAKE3 |
-| 所有其他 MIT/Apache-2.0 依賴 | 無需署名（MIT 不要求 attribution） |
+| ?�?�其�?MIT/Apache-2.0 依賴 | ?��?署�?（MIT 不�?�?attribution�?|
 
-### 高風險授權掃描
+### 高風?��?權�???
 
-| 授權 | 存在於依賴樹 | 風險 |
+| ?��? | 存在?��?賴樹 | 風險 |
 |---|---|---|
-| GPL (any version) | ❌ 不存在 | 無 |
-| AGPL | ❌ 不存在 | 無 |
-| LGPL | ❌ 不存在 | 無 |
-| MPL | ❌ 不存在 | 無 |
-| CDDL | ❌ 不存在 | 無 |
-| 未宣告授權 | ❌ 不存在 | 無 |
+| GPL (any version) | ??不�???| ??|
+| AGPL | ??不�???| ??|
+| LGPL | ??不�???| ??|
+| MPL | ??不�???| ??|
+| CDDL | ??不�???| ??|
+| ?�宣?��?�?| ??不�???| ??|
 
 ---
 
-## 4. TEST/ 目錄 — ⚠️ 注意事項
+## 4. TEST/ ?��? ???��? 注�?事�?
 
-`TEST/` 目錄含有第三方版權內容（有聲書《劍來》音訊檔案）。
+`TEST/` ?��??��?第�??��?權內容�??�聲?�《�?來》音訊�?案�???
 
-| 項目 | 狀態 |
+| ?�目 | ?�??|
 |---|---|
-| Git 追蹤 | ❌ 已透過 `.gitignore` 排除 |
-| 散佈風險 | ❌ 不會隨原始碼散佈 |
-| 授權涵蓋 | ❌ MIT License 不涵蓋此內容 |
-| 版權警告 | ✅ `TEST/README.md` 已添加警告 |
-| 替代方案 | 建議替換為自行產生的測試資料 |
+| Git 追蹤 | ??已透�? `.gitignore` ?�除 |
+| ???風險 | ??不�??��?始碼??? |
+| ?��?涵�? | ??MIT License 不涵?�此?�容 |
+| ?��?警�? | ??`TEST/README.md` 已添?�警??|
+| ?�代?��? | 建議?��??�自行產?��?測試資�? |
 
-### 風險評估: **低**
+### 風險評估: **�?*
 
-- 內容已被 `.gitignore` 排除，不會被提交至 Git repository
-- 僅存在於開發者本機環境
-- 已添加版權歸屬與使用限制說明
+- ?�容已被 `.gitignore` ?�除，�??�被?�交??Git repository
+- ?��??�於?�發?�本機環�?
+- 已添?��?權歸屬�?使用?�制說�?
 
 ---
 
-## 5. README 版權宣告 — ✅ PASS
+## 5. README ?��?�?? ????PASS
 
 ```markdown
-> Copyright © 2026 逍遙 (XiaoYao).
+> Copyright © 2026 ?��? (XiaoYao).
 > SPDX-License-Identifier: MIT
 ```
 
 ---
 
-## 6. Cargo.toml 元數據 — ✅ PASS
+## 6. Cargo.toml ?�數??????PASS
 
-| 欄位 | 值 | 狀態 |
+| 欄�? | ??| ?�??|
 |---|---|---|
-| `license` | `"MIT"` | ✅ |
-| `repository` | 已設定 | ✅ |
-| `authors` | 已設定 | ✅ |
-| `keywords` | 已設定 | ✅ |
-| `categories` | 已設定 | ✅ |
+| `license` | `"MIT"` | ??|
+| `repository` | 已設�?| ??|
+| `authors` | 已設�?| ??|
+| `keywords` | 已設�?| ??|
+| `categories` | 已設�?| ??|
 
 ---
 
-## 7. 建議改善項目
+## 7. 建議?��??�目
 
-| 優先級 | 建議 |
+| ?��?�?| 建議 |
 |---|---|
-| 🟢 低 | 為 `Onee Checker` 名稱註冊商標（如計劃商業化） |
-| 🟢 低 | 取代 TEST/ 目錄內容為無版權測試資料 |
-| ✅ 已完成 | CI 已加入 `cargo-deny` 掃描與 `cargo audit`（2.0.3 起，見 `.github/workflows/ci.yml`） |
+| ?�� �?| ??`Onee Checker` ?�稱註�??��?（�?計�??�業?��? |
+| ?�� �?| ?�代 TEST/ ?��??�容?�無?��?測試資�? |
+| ??已�???| CI 已�???`cargo-deny` ?��???`cargo audit`�?.0.3 起�?�?`.github/workflows/ci.yml`�?|
 
 ---
 
-## 結論
+## 結�?
 
-**✅ 本專案版權合規。所有檢查項目通過。**
+**???��?案�?權�?規。�??�檢?��??�通�???*
 
-- 授權: MIT (與所有依賴相容)
-- 原始碼標頭: 24/24 檔案含 SPDX 標頭
-- 第三方署名: NOTICE 已包含
-- 商標: 已保留
-- 測試資料: 已標註警告且不納入版本控制
-- 無 GPL/AGPL/LGPL/MPL 污染
+- ?��?: MIT (?��??��?賴相�?
+- ?��?碼�??? 24/24 檔�???SPDX 標頭
+- 第�??�署?? NOTICE 已�???
+- ?��?: 已�???
+- 測試資�?: 已�?註警?��?不�??��??�控??
+- ??GPL/AGPL/LGPL/MPL 污�?

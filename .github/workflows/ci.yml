@@ -44,6 +44,10 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: 格式化檢查
         run: cargo fmt --check
+      - name: 文件建置檢查（rustdoc 警告視為錯誤）
+        run: cargo doc --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
 
   # ──────────────────────────────────────────────
   # MSRV：驗證 Cargo.toml 宣告的最低 Rust 版本仍可建置

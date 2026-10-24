@@ -19,6 +19,7 @@ Onee Checker 遵循 **Library-First** 設計：核心邏輯存在於 `lib.rs`，
                            │
                     ┌──────▼───────┐
                     │    cli/      │  Clap derive 參數定義
+                    │  hash/verify │  （2.1.0 起新增 check/diff）
                     └──────┬───────┘
                            │
 ┌──────────────────────────▼──────────────────────────┐
@@ -27,7 +28,10 @@ Onee Checker 遵循 **Library-First** 設計：核心邏輯存在於 `lib.rs`，
 ├────────────┬──────────┬──────────┬──────────────────┤
 │ algorithm  │  hash    │  hasher  │  tree            │
 │ (類型定義) │ (計算)    │ (14算法) │  (文字輸出)       │
-├────────────┴──────────┴──────────┴──────────────────┤
+├────────────┼──────────┴──────────┼──────────────────┤
+│ report     │  manifest           │  （2.1.0 新增）  │
+│ (輸出契約) │  (清單解析／diff)    │                  │
+├────────────┴─────────────────────┴──────────────────┤
 │                      fs/                             │
 │  ├── node.rs    (FileNode, FileNodeContainer)         │
 │  ├── walker.rs  (walkdir 遍歷 + 深度限制 + symlink)   │
@@ -38,6 +42,13 @@ Onee Checker 遵循 **Library-First** 設計：核心邏輯存在於 `lib.rs`，
 │             OneeError (thiserror) + exit code        │
 └──────────────────────────────────────────────────────┘
 ```
+
+`report` 與 `manifest` 是 2.1.0 的兩個新增切面：
+
+- **report**：只負責「把已知結果寫成某種格式」，不讀檔、不算雜湊。CLI 的 `--format` 與
+  `verify --report` 都透過它輸出；embedder 可直接重用，保證與 CLI 的 JSON schema 一致。
+- **manifest**：只負責「把文字清單變成 `HashEntry`」與「比對兩份清單」。
+  它不知道檔案在哪裡，也不知道雜湊怎麼算，因此可以在單元測試中完全用字串驅動。
 
 ---
 
@@ -72,19 +83,28 @@ CLI: verify <HASHFILE>
 main.rs: cmd_verify()
     │
     ├─► HashAlgo::from_suffix()   — 演算法推斷
-    ├─► fs::canonicalize_root()   — 鎖定根目錄
-    ├─► fs::parse_hash_file()     — 解析 hash 檔
+    ├─► root 決定：-r 或清單所在目錄（空字串時退回 "."）
+    ├─► root.canonicalize()       — 統一絕對路徑，讓 entry 可轉相對路徑
+    ├─► fs::parse_hash_file_strict() — 嚴格解析（格式錯誤 → exit 3）
     │       │
     │       ├─► HashEntry::new()   — hex 驗證
     │       └─► 行數上限檢查 (10M)
     │
-    └─► hash::verify_hash_file()  — rayon 並行驗證
-            │
-            └─► for each entry:
-                ├─► fs::sanitize_rel_path() — Path traversal 防護
-                ├─► hash::compute_file_hash() — 重新計算
-                └─► compare hex strings
+    ├─► hash::verify_hash_file()  — rayon 並行驗證
+    │       │
+    │       └─► for each entry:
+    │           ├─► fs::sanitize_rel_path() — Path traversal 防護
+    │           ├─► hash::compute_file_hash() — 重新計算
+    │           └─► compare hex strings
+    │
+    ├─► 組裝 report::VerifyReport（entries + summary）
+    ├─► --format 非 human → report::write_verify_report(stdout)
+    ├─► --report <PATH>   → 額外寫一份 JSON
+    └─► exit code = report.compute_exit_code()（0/1/2/4）
 ```
+
+2.1.0 的關鍵改變：**先嚴格解析、再驗證**。清單本身有問題時直接回 `3`，
+不會出現「檔案全部不符」這種誤導性結果。
 
 ### JSON/TXT 流程
 
@@ -237,3 +257,43 @@ pub fn compute_multi_hashes_parallel(
 - 目錄中無檔案 → 警告但不報錯
 
 目錄 walker 不忽略 `walkdir` 錯誤，避免因權限或 I/O 問題漏掃檔案後仍生成成功結果。預設 checksum 檔放在來源旁，與 checksum 記錄採用的來源父目錄基準一致。
+
+---
+
+## 輸出契約與退出碼（2.1.0 決策紀錄）
+
+2.1.0 把「輸出」提升為公開契約，理由與取捨如下。
+
+### 1. stdout 只放資料、stderr 只放訊息
+
+**決策**：所有進度、`✔ 已儲存`、統計摘要一律走 stderr。
+
+**理由**：`oneechk hash . -o - | sha256sum -c -` 這類管線必須能直接使用。
+若摘要混進 stdout，使用者就得額外過濾，而過濾規則本身就是不穩定的耦合。
+
+**代價**：使用者看不到「摘要」除非終端機合併兩個串流（終端機預設就是合併的，所以體驗不變）。
+
+### 2. 四段式退出碼
+
+| 碼 | 語意 | 為什麼需要獨立 |
+| :---: | :--- | :--- |
+| 0 | 成功 | — |
+| 1 | 驗證失敗／有差異 | 這是「預期內的不一致」，CI 要失敗但不算工具壞掉 |
+| 2 | 執行或 I/O 錯誤 | 工具本身的環境問題，需要重試或修環境 |
+| 3 | 用法或輸入錯誤 | 呼叫方式錯了，重試無用 |
+| 4 | 無可處理項目 | 空目錄不是錯誤，但確實什麼都沒做 |
+
+**理由**：二值退出碼無法區分「檔案不符」與「清單壞掉」，而這兩者的處置完全不同。
+`4` 獨立出來，是為了讓「掃到空目錄」在 CI 中不被誤判成成功。
+
+### 3. 格式以資料結構為中心
+
+`report` 模組先產生 `VerifyReport`，再由 `write_verify_report` 依格式輸出。
+因此 `json`、`csv`、`ndjson` 的欄位永遠一致（同一份 Rust struct 序列化），
+新增欄位時所有格式同時受益。
+
+### 4. 為何不採用 `--check` 相容旗標
+
+`sha256sum --check` 的輸出格式與退出碼是二值的，無法承載 mismatch/missing/error 的區分。
+`oneechk` 選擇獨立的 `verify` 子命令，並用 `shasum` 格式輸出保持與 coreutils 的互操作性
+（可產生、也可消費 `sha256sum -c` 的清單）。

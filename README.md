@@ -2,411 +2,233 @@
 
 [![Language](https://img.shields.io/badge/language-rust-red?logo=rust)](https://rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Author](https://img.shields.io/badge/author-XiaoYao--Www-blue)](https://github.com/XiaoYao-Www)
-[![Trademark](https://img.shields.io/badge/trademark-retained-orange.svg)](NOTICE)
 [![CI](https://github.com/XiaoYao-Www/onee_checker/actions/workflows/ci.yml/badge.svg)](https://github.com/XiaoYao-Www/onee_checker/actions/workflows/ci.yml)
+[![MSRV](https://img.shields.io/badge/MSRV-1.87-blue)](Cargo.toml)
 
-> Copyright © 2026 [逍遙 (XiaoYao)](https://github.com/XiaoYao-Www).  
-> SPDX-License-Identifier: MIT  
+**Onee Checker**（`oneechk`）是一套可腳本化、輸出可解析的檔案完整性工具：
+一次 I/O 同時計算 14 種雜湊、驗證清單、比對兩份清單，並能輸出目錄結構。
 
-**Onee Checker** (`oneechk`) — 專業 hash 驗證與目錄結構工具。
-
-提供 14 種密碼學雜湊演算法（MD5, SHA-1/2/3, SHAKE-128/256, BLAKE2s/b, BLAKE3），支援多線程並行計算、**多演算法單次 I/O**、BLAKE3 大檔案多線程加速、目錄結構 JSON/txt 輸出、以及 `shasum` 相容格式的 hash 驗證。
-
-可作為 **CLI 工具** 由其他程式／腳本調用，也可作為 **Rust library** 嵌入其他專案。
+與 `sha256sum` 的差別不只是「多幾種演算法」，而是**把驗證流程當成 CI 的一等公民**：
+stdout 只放資料、stderr 只放訊息、退出碼細分四類，讓流水線不必解析人類文字。
 
 ---
 
-## 快速開始
+## 目錄
 
-### Windows 桌面介面
+- [安裝](#安裝)
+- [5 分鐘上手](#5-分鐘上手)
+- [常見工作流程](#常見工作流程)
+- [命令速查](#命令速查)
+- [輸出格式與退出碼](#輸出格式與退出碼)
+- [效能設計](#效能設計)
+- [作為 Rust Library 使用](#作為-rust-library-使用)
+- [支援的演算法](#支援的演算法)
+- [文件索引](#文件索引)
+- [授權](#授權)
 
-Windows 桌面 UI 已拆分為獨立專案 `onee_checker_ui`（獨立 git 儲存庫），可透過圖形介面呼叫指定版本的 `oneechk.exe`；本儲存庫僅包含 CLI 與 library。UI 的功能、建置與打包方式請見該專案的 `README.md`。
+## 安裝
 
-### 安裝
+### 預編譯執行檔（GitHub Releases）
+
+每次 `main` 的版本號變更會自動建置三個平台，檔名格式為
+`oneechk-<版本>-<target>.zip`（內含版本化執行檔、README、LICENSE、NOTICE）：
+
+| 平台 | target |
+| :--- | :--- |
+| Windows x64 | `x86_64-pc-windows-gnu` |
+| Linux x64（musl） | `x86_64-unknown-linux-musl` |
+| Linux arm64（musl） | `aarch64-unknown-linux-musl` |
+
+解壓後把 `oneechk.exe`（或 `oneechk`）放進 `PATH` 即可，無需安裝執行期。
+
+### 從原始碼
 
 ```bash
-# 從原始碼編譯（建議啟用 CPU 原生指令加速）
-RUSTFLAGS="-C target-cpu=native" cargo build --release
+git clone https://github.com/XiaoYao-Www/onee_checker
+cd onee_checker
+cargo build --release          # target/release/oneechk
+```
 
-# 安裝到系統 PATH
+### 以 Cargo 安裝
+
+```bash
 cargo install --path .
 ```
 
-### 基本使用
+需求：Rust 1.87 以上（MSRV），edition 2021。
+
+## 5 分鐘上手
+
+### 第 1 步：產生第一份清單
 
 ```bash
-# 計算 SHA-256 hash（預設算法）
-oneechk hash /path/to/directory
-
-# 計算多種算法
-oneechk hash /path/to/directory -a sha256 -a blake3 -a md5
-
-# 驗證 hash 檔
-oneechk verify directory.sha256
-
-# 多演算法單次掃描（只讀一次磁碟）
-oneechk hash /path/to/directory -a sha256 -a blake3 -a md5
-
-# 生成 JSON 目錄結構
-oneechk json /path/to/directory
-
-# 生成樹狀結構文字檔
-oneechk txt /path/to/directory -s binary -m
+oneechk hash ./dist
 ```
 
----
-
-## 支援的演算法
-
-| 演算法 | CLI 參數 | 輸出長度 (bits) | 可變長度 |
-|---|---|---|---|
-| MD5 | `md5` | 128 | ❌ |
-| SHA-1 | `sha1` | 160 | ❌ |
-| SHA-224 | `sha224` | 224 | ❌ |
-| SHA-256 | `sha256` | 256 | ❌ |
-| SHA-384 | `sha384` | 384 | ❌ |
-| SHA-512 | `sha512` | 512 | ❌ |
-| SHA3-256 | `sha3-256` | 256 | ❌ |
-| SHA3-512 | `sha3-512` | 512 | ❌ |
-| SHAKE-128 | `shake128` | 256 (可調) | ✅ |
-| SHAKE-256 | `shake256` | 512 (可調) | ✅ |
-| BLAKE2s-256 | `blake2s256` | 256 | ❌ |
-| BLAKE2b-512 | `blake2b512` | 512 | ❌ |
-| BLAKE3 | `blake3` | 256 (可調) | ✅ |
-
----
-
-## 命令參考
-
-### `oneechk hash` — 生成 hash 驗證檔
-
-```
-oneechk hash [OPTIONS] <PATH>
-
-Arguments:
-  <PATH>              要計算的路徑（檔案或目錄）
-
-Options:
-  -a, --algo <ALGO>   演算法（可多次指定）[預設: sha256]
-  -o, --output <OUT>  輸出檔案路徑。指定 `-` 輸出到 stdout
-                       [預設: <dirname>.<算法副檔名>]
-      --length <LEN>   可變長度演算法的輸出長度 (bytes)
-      --buffer <SIZE>  讀取緩衝區大小，支援 K/M/G 後綴 [預設: 1M]
-  -t, --threads <N>    並行線程數 [預設: CPU 邏輯核心數]
-  -q, --quiet          安靜模式，不顯示進度條
+```text
+✔ 已儲存: ./dist.sha256
 ```
 
-**範例：**
+預設檔名是 `<目錄名稱>.<演算法>`，預設演算法 `sha256`。
+想直接看結果、不寫檔：
 
 ```bash
-# 預設 SHA-256
-oneechk hash ./my-files
-
-# 指定 BLAKE3 且自訂輸出長度 64 bytes
-oneechk hash ./my-files -a blake3 --length 64
-
-# 同時計算三種算法
-oneechk hash ./my-files -a sha256 -a md5 -a blake3
-
-# 輸出 hash 到 stdout（供其他程式解析）
-oneechk hash ./my-files -o - -q
-
-# 自訂 4K buffer 與 2 線程
-oneechk hash ./my-files --buffer 4K -t 2
+oneechk hash ./dist -o -
 ```
 
-### `oneechk verify` — 驗證 hash 驗證檔
-
-```
-oneechk verify [OPTIONS] <HASHFILE>
-
-Arguments:
-  <HASHFILE>          hash 驗證檔路徑
-
-Options:
-  -a, --algo <ALGO>   手動指定演算法 [預設: 從副檔名推斷]
-  -r, --root <DIR>    根目錄路徑 [預設: hash 檔所在目錄]
-      --buffer <SIZE>  讀取緩衝區大小 [預設: 1M]
-  -t, --threads <N>    並行線程數
-  -q, --quiet          僅顯示最終摘要
+```text
+8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8  dist/a.txt
+f44e64e75f3948e9f73f8dfa94721c4ce8cbb4f265c4790c702b2d41cfbf2753  dist/b.txt
 ```
 
-**範例：**
+### 第 2 步：驗證
 
 ```bash
-# 驗證（演算法從副檔名自動推斷）
-oneechk verify files.sha256
-
-# 手動指定演算法
-oneechk verify checksums -a md5
-
-# 指定根目錄（hash 檔中的相對路徑以此為基準）
-oneechk verify files.sha256 -r /backup/location
+oneechk verify dist.sha256
 ```
 
-### `oneechk json` — 生成 JSON 目錄結構
-
-```
-oneechk json [OPTIONS] <PATH>
-
-Arguments:
-  <PATH>              要掃描的目錄
-
-Options:
-  -o, --output <OUT>  輸出檔案路徑。指定 `-` 輸出到 stdout
-                       [預設: <dirname>.struct.json]
-  -q, --quiet          安靜模式
+```text
+✔ 驗證完成: 2 個檔案, 2 匹配, 0 不匹配, 0 錯誤
 ```
 
-**輸出格式：**
+把檔案改一個位元再跑一次，退出碼會從 `0` 變成 `1`：
+
+```bash
+oneechk verify dist.sha256 -q; echo $?
+# 1
+```
+
+### 第 3 步：放進腳本 / CI
+
+```bash
+oneechk verify dist.sha256 -q --format json > verify.json || exit 1
+```
+
+`--format json` 的輸出是穩定的機器契約（見 [doc/CLI.md](doc/CLI.md#輸出格式詳解)），
+`stderr` 不會混進 stdout，可以直接 `jq`。
+
+## 常見工作流程
+
+### 發佈物校驗（下載端）
+
+```bash
+# 發佈者
+oneechk hash ./artifacts -a sha256 -a blake3
+
+# 使用者
+oneechk verify artifacts.sha256 -r ./artifacts
+```
+
+### 單一檔案快速確認
+
+```bash
+oneechk check ./download.zip --expect 8ed3f6ad... --ignore-case
+```
+
+### 版本之間有什麼變了
+
+```bash
+oneechk diff v1.sha256 v2.sha256 --format json
+```
 
 ```json
-{
-  "version": "0.1.0",
-  "generation_time": 1717200000,
-  "nodes": [
-    {
-      "name": "my-files",
-      "is_dir": true,
-      "is_symlink": false,
-      "extension": null,
-      "size": 1048576,
-      "last_modified": 1717200000,
-      "created_at": 1717200000,
-      "children": [
-        {
-          "name": "photo.jpg",
-          "is_dir": false,
-          "extension": "jpg",
-          "size": 524288,
-          ...
-        }
-      ]
-    }
-  ]
-}
+{"added":["data/c.txt"],"removed":[],"changed":[],"unchanged":2}
 ```
 
-### `oneechk txt` — 生成樹狀目錄結構
-
-```
-oneechk txt [OPTIONS] <PATH>
-
-Arguments:
-  <PATH>              要掃描的目錄
-
-Options:
-  -o, --output <OUT>  輸出檔案路徑。指定 `-` 輸出到 stdout
-                       [預設: <dirname>.tree.txt]
-  -s, --size <TYPE>   大小顯示格式 [binary, decimal, raw]
-  -m, --modified      顯示最後修改時間
-  -c, --created       顯示建立時間
-  -q, --quiet         安靜模式
-```
-
-**輸出範例：**
-
-```
-# ******************************
-# Generation Time: 2026-06-02 15:30:00 +0800
-# ******************************
-
-my-files (1.00 GiB) [mod: 2026-01-15 10:30:00 +08:00]
-├── photos (512.00 MiB) [mod: 2026-01-10 08:00:00 +08:00]
-│   ├── vacation.jpg (2.35 MiB) [mod: 2025-12-20 14:22:10 +08:00]
-│   └── family.jpg (3.12 MiB) [mod: 2025-12-21 09:15:45 +08:00]
-└── documents (256.00 MiB) [mod: 2026-01-14 16:45:30 +08:00]
-    ├── report.pdf (1.50 MiB) [mod: 2026-01-14 10:00:00 +08:00]
-    └── notes.txt (12.50 KiB) [mod: 2026-01-13 22:30:15 +08:00]
-```
-
----
-
-## 作為底層基礎設施調用
-
-Onee Checker 設計為可被其他軟體／腳本以 subprocess 方式調用。
-
-### stdout/stderr 分離原則
-
-- **stdout** → 機器可解析的資料（hash 行、JSON、樹狀文字）
-- **stderr** → 人類可讀的訊息（進度、錯誤、狀態）
-
-### Exit Code
-
-| Code | 含義 |
-|---|---|
-| **0** | 成功 |
-| **1** | hash 不匹配（驗證失敗） |
-| **2** | I/O、輸出或內部錯誤 |
-| **3** | CLI 參數、路徑或 hash 檔格式錯誤 |
-
-`hash` 掃描遇到任何檔案讀取錯誤時會回傳 `2`，並停止寫出不完整的 checksum 檔；`verify` 遇到讀取錯誤回傳 `2`、hash 不匹配回傳 `1`、無效 hash 檔或參數回傳 `3`。命令列參數錯誤也採用 `3`；`--help` 和 `--version` 維持成功碼 `0`。預設 checksum 檔會放在來源檔案或目錄旁，路徑以該來源的父目錄為根，因而可直接用預設 `verify` 路徑完成往返驗證。
-
-### 典型調用範例
+### 目錄盤點（給 issue 或審查用）
 
 ```bash
-# 生成 hash 並 pipe 給其他工具
-oneechk hash /data -o - -q | grep "important_file"
-
-# 驗證並從 exit code 判斷結果
-oneechk verify /data/checksums.sha256 -q
-if [ $? -eq 0 ]; then
-    echo "完整性驗證通過"
-else
-    echo "檔案損壞或已變更！"
-fi
-
-# JSON 輸出給 jq 解析
-oneechk json /data -o - -q | jq '.nodes[0].children[] | select(.size > 1048576)'
+oneechk txt ./src -s binary -m
+oneechk json ./src -o src.struct.json
 ```
 
----
+### 多演算法一次算完
+
+```bash
+oneechk hash ./big.iso -a sha256 -a blake3 -a sha512 --digest-only
+```
+
+單次讀取 I/O，三種雜湊一起算完；檔案大時差距可達數倍。
+
+## 命令速查
+
+| 命令 | 用途 | 常用參數 |
+| :--- | :--- | :--- |
+| `hash <PATH>` | 產生清單 | `-a`（可重複）、`-o -`（stdout）、`--digest-only`、`-t` |
+| `verify <HASHFILE>` | 依清單驗證 | `-r`、`--format json`、`--report`、`--ignore-missing` |
+| `check <PATH>` | 單檔／文字驗證 | `--expect`、`-a`、`--ignore-case` |
+| `diff <OLD> <NEW>` | 比對兩份清單 | `--format human\|csv\|json` |
+| `json <PATH>` | 目錄結構 JSON | `-o` |
+| `txt <PATH>` | 樹狀文字 | `-s`、`-m`、`-c` |
+
+全域選項：`--format`、`--no-color`、`-h`、`-V`。完整參數見 [doc/CLI.md](doc/CLI.md)。
+
+## 輸出格式與退出碼
+
+| 格式 | 適用 | 樣貌 |
+| :--- | :--- | :--- |
+| `human` | 終端閱讀 | 上色訊息、統計摘要 |
+| `shasum` | 相容 `sha256sum -c` | `<hex>  <path>` |
+| `bsd` | BSD 工具鏈 | `<algo> (<path>) = <hex>` |
+| `json` | 程式解析 | 完整報告物件／每行一個物件 |
+| `csv` | 試算表 | 表頭 + 逗號分隔 |
+| `ndjson` | 串流處理 | 每行一筆，尾端含摘要 |
+
+| 退出碼 | 意義 |
+| :---: | :--- |
+| `0` | 成功 |
+| `1` | 驗證失敗／有差異 |
+| `2` | 執行或 I/O 錯誤 |
+| `3` | 用法或輸入錯誤 |
+| `4` | 無可處理項目 |
+
+## 效能設計
+
+- **單次 I/O、多種雜湊**：`-a sha256 -a blake3` 只掃描檔案一次。
+- **檔案級並行**：以 `rayon` 平行處理多檔案，`-t` 可限制執行緒數。
+- **有界記憶體**：讀取緩衝區夾在 4 KiB～64 MiB；BLAKE3 對大檔的整檔載入
+  預設上限 512 MiB，可用 `ONEE_BLAKE3_BULK_MAX_MB` 調整。
+- **串流為預設**：除 BLAKE3 在特定大小區間會走 `update_bulk` 外，其餘一律串流計算。
+
+調校建議與量測方法見 [doc/OPTIMIZATION.md](doc/OPTIMIZATION.md)。
 
 ## 作為 Rust Library 使用
 
 ```rust
-use onee_checker::prelude::*;
-use std::path::Path;
+use onee_checker::algorithm::HashType;
+use onee_checker::fs::list_files;
+use onee_checker::hash::compute_hashes_parallel;
 
-fn main() -> Result<()> {
-    // 並行計算整個目錄的 SHA-256
-    let files = list_files(Path::new("/data"))?;
-    let results = compute_hashes_parallel(&files, &HashType::SHA256, 1024 * 1024);
-
-    for result in results {
-        match result {
-            Ok(data) => println!("{} = {}", data.path.display(), data.hash_hex()),
-            Err(e) => eprintln!("Error: {e}"),
-        }
-    }
-
-    // 驗證 hash 檔
-    let verify_results = verify_hash_file(
-        Path::new("checksums.sha256"),
-        &HashType::SHA256,
-        Path::new("/data"),
-        1024 * 1024,
-    );
-
-    Ok(())
+let files = list_files("./dist")?;
+let results = compute_hashes_parallel(&files, &HashType::SHA256, 1024 * 1024);
+for item in results.into_iter().flatten() {
+    println!("{}  {}", item.hash_hex(), item.path.display());
 }
+# Ok::<(), onee_checker::error::OneeError>(())
 ```
 
-### Library 公開 API 模組
+模組：`algorithm`、`hash`、`hasher`、`fs`、`tree`、`report`、`manifest`、`error`。
+完整 API 見 [doc/API.md](doc/API.md)。
 
-| 模組 | 功能 |
-|---|---|
-| `algorithm` | `HashType`, `HashAlgo`, `HashData`, `BufferSize` |
-| `hash` | `compute_file_hash`, `compute_hashes_parallel`, `verify_hash_file` |
-| `hasher` | `HasherEnum` — 零 heap alloc 的 14 種雜湊器枚舉 |
-| `fs` | `list_files`, `build_file_node`, `parse_hash_file`, `sanitize_rel_path` |
-| `tree` | `write_tree`, `SizeFormat`, `TreeOption` |
-| `error` | `OneeError` — 結構化錯誤，含 exit code |
+## 支援的演算法
 
----
+MD5、SHA-1、SHA-224、SHA-256、SHA-384、SHA-512、SHA3-256、SHA3-512、
+SHAKE-128、SHAKE-256、BLAKE2s-256、BLAKE2b-512、BLAKE3。
+可變長度演算法支援 `--length`。
 
-## 安全性
+## 文件索引
 
-Onee Checker 在設計中考慮了以下安全防護：
+| 文件 | 內容 |
+| :--- | :--- |
+| [doc/TUTORIAL.md](doc/TUTORIAL.md) | 循序教學：從第一份清單到 CI 整合 |
+| [doc/CLI.md](doc/CLI.md) | 完整指令參考、輸出格式、退出碼 |
+| [doc/API.md](doc/API.md) | Library API 與型別 |
+| [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) | 模組分層、資料流、設計決策 |
+| [doc/OPTIMIZATION.md](doc/OPTIMIZATION.md) | 效能調校與量測 |
+| [doc/SECURITY.md](doc/SECURITY.md) | 安全模型與威脅考量 |
+| [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) | 開發、測試、CI、發佈流程 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本變更記錄 |
 
-| 防護 | 機制 |
-|---|---|
-| **Path Traversal** | `sanitize_rel_path()` 拒絕 `..`、絕對路徑、null byte |
-| **Symlink 逃脫** | `build_node_recursive` 驗證 symlink 目標在根目錄內 |
-| **Hash Parser DoS** | 行數上限 10M、hex 格式驗證 |
-| **Windows 裝置名稱** | 拒絕 CON、NUL、PRN 等保留名稱 |
-| **Buffer overflow** | `u16` 限制可變長度雜湊長度最大值 |
-| **Stack overflow** | `build_node_recursive` 深度上限 1024 層 |
+## 授權
 
-詳見 [`doc/SECURITY.md`](doc/SECURITY.md) 與 [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md) 的安全設計說明。
-
----
-
-## 效能
-
-### 硬體加速
-
-- **SHA-2**: 在 x86_64 平台自動啟用 SHA-NI 指令（需以 `RUSTFLAGS="-C target-cpu=native"` 編譯）
-- **BLAKE3**: 執行期自動檢測 SSE4.1 / AVX2 / AVX-512
-- **HasherEnum**: 零 heap alloc 的 enum 靜態分發，編譯器可完全 inline
-
-### 建議編譯參數
-
-```bash
-# 最大效能
-RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C lto=fat" cargo build --release
-```
-
----
-
-## 專案結構
-
-```
-src/
-├── lib.rs              # Library 公開 API + prelude
-├── main.rs             # CLI 薄調度層
-├── algorithm.rs        # HashType / HashAlgo / HashData
-├── error.rs            # OneeError (thiserror)
-├── hash.rs             # 雜湊計算引擎
-├── tree.rs             # 樹狀文字輸出
-├── cli/                # Clap 參數定義（4 子命令）
-├── fs/                 # 檔案系統操作 + 安全防護
-│   ├── node.rs         # FileNode 結構
-│   ├── walker.rs       # walkdir 遍歷
-│   ├── writer.rs       # Hash 檔/JSON 寫入 + parser
-│   └── path_safe.rs    # Path traversal 防護
-└── hasher/             # 14 種雜湊演算法實作
-    ├── mod.rs
-    ├── enum_hasher.rs  # HasherEnum 零成本靜態分發
-    ├── md5_hasher.rs
-    ├── sha1_hasher.rs
-    ├── sha2_hasher.rs
-    ├── sha3_hasher.rs
-    ├── blake2_hasher.rs
-    └── blake3_hasher.rs
-```
-
----
-
-## 相依套件
-
-| 依賴 | 用途 | 版本 |
-|---|---|---|
-| `clap` | CLI 參數解析 | 4.6 |
-| `rayon` | 並行計算 | 1.12 |
-| `walkdir` | 目錄遍歷 | 2.5 |
-| `sha2` | SHA-2 系列演算法 | 0.11 |
-| `sha3` | SHA-3 / SHAKE | 0.11 |
-| `blake3` | BLAKE3 | 1.8 |
-| `indicatif` | 進度條 | 0.18 |
-| `serde` / `serde_json` | JSON 序列化 | 1.0 |
-| `thiserror` | 結構化錯誤 | 2 |
-| `chrono` | 時間格式化 | 0.4 |
-
----
-
-## 效能基準
-
-在 x86_64 處理器上以 `cargo bench` 測得（release 模式）：
-
-| 情境 | 吞吐量 | 備註 |
-|------|--------|------|
-| SHA-256 1MB | ~2.6 GB/s | `sha2` crate，含 SHA-NI 加速 |
-| BLAKE3 1MB | ~5.7 GB/s | 自動偵測 AVX2 |
-| BLAKE3 100MB | ~5.1 GB/s | 串流模式，O(1) 記憶體 |
-| hex 編碼 (32 bytes) | ~310 MB/s | `hex::encode` |
-
-> 完整基準報告：執行 `cargo bench`
-
----
-
-## License
-
-本專案以 [MIT License](LICENSE) 授權。
-
-**商標保留**: "Onee Checker"、"oneechk" 名稱及專案標誌為作者商標。MIT 授權不包含商標使用權。衍生作品或分支必須更名以避免混淆。詳見 [NOTICE](NOTICE)。
-
-Copyright © 2026 逍遙 (XiaoYao) — [GitHub](https://github.com/XiaoYao-Www)
-
-依賴套件的授權詳見 [doc/LICENSE-AUDIT.md](doc/LICENSE-AUDIT.md)。
+MIT，見 [LICENSE](LICENSE)。版權所有 (c) 2026 逍遙 (XiaoYao)。

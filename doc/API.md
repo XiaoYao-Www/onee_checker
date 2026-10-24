@@ -2,6 +2,9 @@
 
 Onee Checker 可作為 Rust library (`onee_checker`) 嵌入其他專案。公開 API 透過 `onee_checker::prelude::*` 匯出。
 
+> 本文對應版本 **2.1.0**。2.1.0 新增 `report`（輸出契約）與 `manifest`（清單解析／比對）兩個模組，
+> 並在 `OneeError` 加入 `NothingToDo`（CLI 退出碼 4）。
+
 ---
 
 ## 模組概覽
@@ -13,6 +16,8 @@ onee_checker
 ├── hasher       — 14 種演算法實作 + HasherEnum 靜態分發
 ├── fs           — 檔案系統操作與安全防護
 ├── tree         — 樹狀目錄結構輸出
+├── report       — 輸出格式與驗證報告（v2.1.0 新增）
+├── manifest     — 清單格式偵測／解析／diff（v2.1.0 新增）
 ├── error        — 結構化錯誤 (OneeError)
 └── cli          — Clap 參數定義 (供 CLI 使用，embedder 可忽略)
 ```
@@ -361,17 +366,201 @@ pub enum OneeError {
     UnsupportedLength { algorithm: String },
     UnsupportedAlgorithm(String),
     ArgumentError(String),
+    NothingToDo,
 }
 ```
 
+| 變體 | CLI 退出碼 |
+| :--- | :---: |
+| `HashMismatch` | 1 |
+| `Io`、`Serde` | 2 |
+| `HashFileParseError`、`InvalidPath`、`UnsupportedLength`、`UnsupportedAlgorithm`、`ArgumentError` | 3 |
+| `NothingToDo` | 4 |
+
 | 方法 | 說明 |
 |---|---|
-| `exit_code() -> i32` | 專案 CLI 契約：0 成功、1 hash 不匹配、2 I/O/執行錯誤、3 輸入/格式錯誤 |
+| `exit_code() -> i32` | 專案 CLI 契約：0 成功、1 hash 不匹配、2 I/O/執行錯誤、3 輸入/格式錯誤、4 無可處理項目 |
 
 ### `Result<T>`
 
 ```rust
 pub type Result<T> = std::result::Result<T, OneeError>;
+```
+
+---
+
+## `onee_checker::report`（v2.1.0 新增）
+
+輸出契約層：把「要輸出什麼」與「怎麼寫」分開，讓 CLI 與 embedder 共用同一套格式。
+
+### `OutputFormat`
+
+```rust
+pub enum OutputFormat { Human, Shasum, Bsd, Json, Csv, Ndjson }
+```
+
+`clap::ValueEnum`，`Default` 為 `Human`，CLI 上即 `--format` 的合法值。
+
+### `EntryStatus`
+
+```rust
+pub enum EntryStatus { Match, Mismatch, Error, Missing }
+
+impl EntryStatus {
+    pub fn as_str(&self) -> &'static str;   // "match" / "mismatch" / "error" / "missing"
+}
+```
+
+### `EntryReport`
+
+```rust
+pub struct EntryReport {
+    pub path: String,
+    pub status: EntryStatus,
+    pub expected: Option<String>,
+    pub actual: Option<String>,
+    pub error: Option<String>,
+}
+
+impl EntryReport {
+    pub fn new(path: impl Into<String>, status: EntryStatus) -> Self;
+}
+```
+
+路徑建議使用相對於根目錄、以 `/` 分隔的形式，這樣輸出可以跨平台一致。
+
+### `VerifySummary` 與 `VerifyReport`
+
+```rust
+pub struct VerifySummary { pub total: u64, pub matched: u64, pub mismatched: u64,
+                           pub errors: u64, pub missing: u64 }
+
+impl VerifySummary {
+    pub fn from_entries(entries: &[EntryReport]) -> Self;
+    pub fn add(&mut self, status: EntryStatus);
+}
+
+pub struct VerifyReport {
+    pub version: String, pub command: String, pub hashfile: String,
+    pub algorithm: String, pub root: String, pub summary: VerifySummary,
+    pub exit_code: i32, pub entries: Vec<EntryReport>,
+}
+
+impl VerifyReport {
+    pub const fn compute_exit_code(&self) -> i32;
+}
+```
+
+`compute_exit_code()` 的優先序：`errors > 0 → 2`、`mismatched > 0 → 1`、`total == 0 → 4`、否則 `0`。
+
+### 寫入函式
+
+```rust
+pub fn csv_escape(field: &str) -> String;
+
+pub fn write_hash_line<W: Write>(w: &mut W, format: OutputFormat,
+    algorithm: &str, hash_hex: &str, rel_path: &str) -> io::Result<()>;
+
+pub fn write_entry<W: Write>(w: &mut W, format: OutputFormat,
+    entry: &EntryReport) -> io::Result<()>;
+
+pub fn write_verify_report<W: Write>(w: &mut W, format: OutputFormat,
+    report: &VerifyReport) -> io::Result<()>;
+```
+
+`Human` 格式在 `write_*` 中不輸出資料（人類訊息由呼叫端寫到 stderr），
+所以把 `Human` 傳進來是安全的 no-op。
+
+### 範例：產生 JSON 驗證報告
+
+```rust
+use onee_checker::report::{EntryReport, EntryStatus, VerifyReport, VerifySummary};
+
+let entries = vec![
+    EntryReport::new("dist/a.txt", EntryStatus::Match),
+];
+
+let report = VerifyReport {
+    version: env!("CARGO_PKG_VERSION").to_string(),
+    command: "verify".to_string(),
+    hashfile: "dist.sha256".to_string(),
+    algorithm: "SHA-256".to_string(),
+    root: ".".to_string(),
+    summary: VerifySummary::from_entries(&entries),
+    exit_code: 0,
+    entries,
+};
+
+let mut out = std::io::stdout();
+onee_checker::report::write_verify_report(&mut out, onee_checker::report::OutputFormat::Json, &report)?;
+# Ok::<(), std::io::Error>(())
+```
+
+---
+
+## `onee_checker::manifest`（v2.1.0 新增）
+
+清單（manifest）解析與比對：支援 Shasum、BSD、CSV、JSON 四種格式。
+
+### `ManifestFormat`
+
+```rust
+pub enum ManifestFormat { Shasum, Bsd, Csv, Json }
+
+impl ManifestFormat {
+    pub const fn as_str(self) -> &'static str;
+    pub fn from_suffix(suffix: &str) -> Option<Self>;   // ".sha256" / "csv" / "json" …
+}
+```
+
+### 偵測與解析
+
+```rust
+pub fn detect_format(content: &str) -> Option<ManifestFormat>;
+pub fn parse_auto(content: &str) -> Result<(ManifestFormat, Vec<HashEntry>)>;
+pub fn parse(content: &str, format: ManifestFormat) -> Result<Vec<HashEntry>>;
+```
+
+`detect_format` 的優先序為 **BSD > JSON > CSV > Shasum**；`parse_auto` 在偵測到的格式解析失敗時
+會退回 Shasum 再試一次，因此把 `sha256sum` 產生的檔案或含逗號路徑的清單丟進來都能解析。
+
+`HashEntry { hash_hex, rel_path }` 由 `onee_checker::fs` 提供；`rel_path` 保留原始分隔符。
+
+### `DiffReport`
+
+```rust
+pub struct ChangedEntry { pub path: String, pub old_hash: String, pub new_hash: String }
+
+pub struct DiffReport {
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    pub changed: Vec<ChangedEntry>,
+    pub unchanged: u64,
+}
+
+impl DiffReport {
+    pub fn is_empty(&self) -> bool;
+    pub fn total_changes(&self) -> usize;
+}
+
+pub fn diff(old: &[HashEntry], new: &[HashEntry]) -> DiffReport;
+```
+
+`diff` 以 `rel_path` 為鍵、十六進位比較不分大小寫，結果依路徑升冪排序；
+`DiffReport` 與 `ChangedEntry` 都實作 `serde::Serialize`，可直接輸出 JSON。
+
+### 範例：比對兩份清單
+
+```rust
+use onee_checker::manifest::{diff, parse_auto};
+
+let (_, v1) = parse_auto(&std::fs::read_to_string("v1.sha256")?)?;
+let (_, v2) = parse_auto(&std::fs::read_to_string("v2.sha256")?)?;
+
+let report = diff(&v1, &v2);
+println!("{} 新增, {} 移除, {} 變更",
+    report.added.len(), report.removed.len(), report.changed.len());
+# Ok::<(), onee_checker::error::OneeError>(())
 ```
 
 ---

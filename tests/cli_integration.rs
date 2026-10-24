@@ -689,3 +689,25 @@ fn test_cli_diff_parse_error_exit_3() {
 
     assert.code(predicate::eq(3));
 }
+
+/// 清單只有檔名、位於當前目錄時，根目錄應退回 `.` 而不是空字串。
+#[test]
+fn test_cli_verify_manifest_in_cwd() {
+    let dir = TempDir::new().expect("應該能建立暫存目錄");
+    fs::write(dir.path().join("a.txt"), b"hello").expect("應該能寫入檔案");
+    fs::write(
+        dir.path().join("data.sha256"),
+        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824  a.txt\n",
+    )
+    .expect("應該能寫入清單");
+
+    let assert = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .current_dir(dir.path())
+        .arg("verify")
+        .arg("data.sha256")
+        .arg("-q")
+        .assert();
+
+    assert.success();
+}

@@ -1,368 +1,386 @@
-# Onee Checker 指令參考手冊 (CLI)
+# Onee Checker 指令參考手冊
 
-**版本**: 2.0.3  
-**二進位名稱**: `oneechk`
+**版本**：2.1.0 ｜ **執行檔名稱**：`oneechk`
 
----
-
-## 概覽
-
-```
-oneechk <COMMAND> [OPTIONS]
-
-Commands:
-  hash    生成 hash 驗證檔
-  verify  驗證 hash 驗證檔
-  json    生成 JSON 目錄結構紀錄
-  txt     生成文字樹狀目錄結構
-  help    Print this message or the help of the given subcommand(s)
-
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
-```
+本文件是 `oneechk` 的完整指令參考。想循序學習，請看 [TUTORIAL.md](TUTORIAL.md)；
+想了解輸出欄位與程式設計介面，請看 [API.md](API.md)。
 
 ---
 
-## 1. `oneechk hash` — 生成 hash 驗證檔
+## 目錄
 
-計算指定路徑下所有檔案的密碼學雜湊值，輸出 `shasum` 相容格式。
+1. [呼叫慣例](#呼叫慣例)
+2. [全域選項](#全域選項)
+3. [子命令](#子命令)
+   - [`hash`](#hash)
+   - [`verify`](#verify)
+   - [`check`](#check)
+   - [`diff`](#diff)
+   - [`json`](#json)
+   - [`txt`](#txt)
+4. [輸出格式詳解](#輸出格式詳解)
+5. [退出碼與 CI 用法](#退出碼與-ci-用法)
+6. [與 GNU coreutils 的相容性](#與-gnu-coreutils-的相容性)
+7. [常見錯誤與排解](#常見錯誤與排解)
 
-### 語法
+---
 
-```
-oneechk hash [OPTIONS] <PATH>
-```
+## 呼叫慣例
 
-### 參數
-
-| 參數 | 短 | 長 | 類型 | 預設 | 說明 |
-|---|---|---|---|---|---|
-| `<PATH>` | | | `PathBuf` | (必需) | 要計算的檔案或目錄路徑 |
-| `--algo` | `-a` | `--algo` | `HashAlgo[]` | `sha256` | 演算法，可多次指定 |
-| `--output` | `-o` | `--output` | `PathBuf` | source sibling | 輸出檔案。指定 `-` 輸出到 stdout |
-| `--length` | | `--length` | `u16` | 預設值 | 可變長度演算法的輸出長度 (bytes) |
-| `--buffer` | | `--buffer` | `BufferSize` | `1M` | 讀取緩衝區大小 (支援 K/M/G 後綴) |
-| `--threads` | `-t` | `--threads` | `usize` | CPU cores | 並行線程數 |
-| `--quiet` | `-q` | `--quiet` | flag | false | 不顯示進度條 |
-
-### 支援的演算法
-
-| 值 | 演算法 | 輸出長度 (bits) | 副檔名 | 可變長度 |
-|---|---|---|---|---|
-| `md5` | MD5 | 128 | `.md5` | ❌ |
-| `sha1` | SHA-1 | 160 | `.sha1` | ❌ |
-| `sha224` | SHA-224 | 224 | `.sha224` | ❌ |
-| `sha256` | SHA-256 | 256 | `.sha256` | ❌ |
-| `sha384` | SHA-384 | 384 | `.sha384` | ❌ |
-| `sha512` | SHA-512 | 512 | `.sha512` | ❌ |
-| `sha3-256` | SHA3-256 | 256 | `.sha3_256` | ❌ |
-| `sha3-512` | SHA3-512 | 512 | `.sha3_512` | ❌ |
-| `shake128` | SHAKE-128 | 256 | `.shake128-<bits>` | ✅ |
-| `shake256` | SHAKE-256 | 512 | `.shake256-<bits>` | ✅ |
-| `blake2s256` | BLAKE2s-256 | 256 | `.blake2s256` | ❌ |
-| `blake2b512` | BLAKE2b-512 | 512 | `.blake2b512` | ❌ |
-| `blake3` | BLAKE3 | 256 | `.blake3-<bits>` | ✅ |
-
-### 輸出格式
-
-```
-# ******************************
-# Total Files Count: 878
-# Generation Time: 2026-06-02 15:30:00 +0800
-# ******************************
-<hash_hex> *<relative_path>
+```text
+oneechk [GLOBAL_OPTIONS] <COMMAND> [OPTIONS] [ARGS]
 ```
 
-- 註解行以 `#` 開頭
-- 每筆記錄格式: `<hex_hash> *<relative_path>`
-- `*` 表示二進位模式 (binary mode)，相容於 GNU/BusyBox `sha*sum`
+**串流分工**（設計契約，腳本可依賴）：
 
-### 範例
+| 串流 | 內容 | 範例 |
+| :--- | :--- | :--- |
+| stdout | 機器可解析的資料 | 雜湊清單、JSON 報告、樹狀文字 |
+| stderr | 人類可讀的訊息 | 進度條、`✔ 已儲存`、錯誤、統計摘要 |
+
+因此 `oneechk hash . -o - | sha256sum -c -` 這類管線可以直接使用，狀態訊息不會污染資料。
+
+## 全域選項
+
+| 選項 | 預設 | 說明 |
+| :--- | :--- | :--- |
+| `-f`, `--format <FORMAT>` | `human` | 輸出格式：`human`、`shasum`、`bsd`、`json`、`csv`、`ndjson`。可放在子命令之前或之後。 |
+| `--no-color` | 關閉 | 停用 ANSI 色彩（適合寫入日誌檔） |
+| `-h`, `--help` | — | 顯示說明 |
+| `-V`, `--version` | — | 顯示版本 |
+
+> `human` 與 `shasum` 在 `hash` 子命令下輸出相同的 `<hex>  <path>` 格式；
+> 其他子命令的 `human` 走「人類可讀」路徑，資料請改用 `json` 或 `csv`。
+
+---
+
+## `hash`
+
+計算檔案或整個目錄的雜湊，並輸出/儲存清單。
 
 ```bash
-# 預設 SHA-256 計算
-oneechk hash ./Downloads
-
-# 輸出: ./Downloads.sha256
-
-# 多重算法
-oneechk hash ./Downloads -a sha256 -a md5 -a blake3
-
-# 輸出: ./Downloads.sha256, ./Downloads.md5, ./Downloads.blake3-256
-
-# stdout 輸出
-oneechk hash ./Downloads -o - -q > checksums.txt
-
-# BLAKE3 自訂 64 bytes 輸出
-oneechk hash ./Downloads -a blake3 --length 64
-
-# 輸出: ./Downloads.blake3-512 (64 bytes × 8 = 512 bits)
-
-# 效能調校
-oneechk hash ./large-dir --buffer 8K -t 4
+oneechk hash <PATH> [OPTIONS]
 ```
 
-### 錯誤案例
+| 選項 | 預設 | 說明 |
+| :--- | :--- | :--- |
+| `<PATH>` | 必填 | 檔案或目錄（目錄會遞迴列出所有檔案） |
+| `-a`, `--algo <ALGO>` | `sha256` | 演算法；**可重複**（`-a sha256 -a blake3`），單次 I/O 同時計算多種雜湊 |
+| `-o`, `--output <PATH>` | `<名稱>.<演算法>` | 輸出檔；`-` 表示寫到 stdout |
+| `--length <N>` | 演算法預設 | 輸出長度（bytes），用於 SHAKE、BLAKE2、BLAKE3 等可變長度演算法 |
+| `--buffer <SIZE>` | `1M` | 讀取緩衝區，支援 `K`/`M`/`G` 後綴（會夾在 4 KiB～64 MiB） |
+| `-t`, `--threads <N>` | CPU 數 | 檔案級並行數 |
+| `--digest-only` | 關閉 | stdout 只印雜湊值（多演算法時每行 `<演算法>: <hex>`） |
+| `--strict` | 關閉 | 遇錯誤立即中止（預設繼續並彙總） |
+| `-q`, `--quiet` | 關閉 | 不顯示進度與訊息 |
 
-| 情境 | Exit Code | 訊息 |
-|---|---|---|
-| 路徑不存在 | 3 | `無效路徑: 路徑不存在: <path>` |
-| 固定長度算法 + `--length` | 3 | `算法不支援自訂輸出長度: Sha256` |
-| 空目錄 | 0 | `⚠ 警告: 指定路徑下無任何檔案` |
-| 任何來源檔案無法讀取 | 2 | 顯示錯誤，且不寫出不完整 checksum 檔 |
-| 無法寫入輸出 | 2 | `I/O 錯誤: ...` |
+**範例**
 
-未指定 `--output` 時，checksum 檔建立在來源檔案或目錄旁，例如 `oneechk hash ./Downloads` 會產生 `./Downloads.sha256`。記錄中的相對路徑以來源的父目錄為根，因此可在該目錄執行 `oneechk verify Downloads.sha256`。
+```bash
+oneechk hash ./release                     # 產生 release.sha256
+oneechk hash ./release -a sha256 -a blake3 # 產生 release.blake3（兩種雜湊各一輪）
+oneechk hash ./release -o -                 # 清單直接寫到 stdout
+oneechk hash ./asset.bin --digest-only      # 只印出雜湊值
+```
+
+**退出碼**：`0` 成功；`2` 有檔案無法讀取；`3` 參數錯誤；`4` 目錄中沒有檔案。
 
 ---
 
-## 2. `oneechk verify` — 驗證 hash 檔
+## `verify`
 
-解析 hash 驗證檔，逐一比對檔案完整性。演算法預設從副檔名自動推斷。
+依清單驗證檔案完整性。
 
-### 語法
-
-```
-oneechk verify [OPTIONS] <HASHFILE>
+```bash
+oneechk verify <HASHFILE> [OPTIONS]
 ```
 
-### 參數
+| 選項 | 預設 | 說明 |
+| :--- | :--- | :--- |
+| `<HASHFILE>` | 必填 | 清單檔（shasum 格式），副檔名用於推斷演算法 |
+| `-a`, `--algo <ALGO>` | 由副檔名推斷 | 明確指定演算法（例如清單命名為 `checksums.txt` 時） |
+| `-r`, `--root <DIR>` | 清單所在目錄 | 檔案搜尋的根目錄 |
+| `--ignore-missing` | 關閉 | 檔案不存在時記為 `missing`，不算錯誤 |
+| `--report <PATH>` | — | 額外輸出完整 JSON 報告（不論 `--format` 為何） |
+| `--buffer <SIZE>` | `1M` | 讀取緩衝區 |
+| `-t`, `--threads <N>` | CPU 數 | 檔案級並行數 |
+| `--strict` | 關閉 | 遇錯誤立即中止 |
+| `-q`, `--quiet` | 關閉 | 只輸出最終統計 |
 
-| 參數 | 短 | 長 | 類型 | 預設 | 說明 |
-|---|---|---|---|---|---|
-| `<HASHFILE>` | | | `PathBuf` | (必需) | hash 驗證檔路徑 |
-| `--algo` | `-a` | `--algo` | `HashAlgo` | auto | 手動指定演算法 |
-| `--root` | `-r` | `--root` | `PathBuf` | hash 檔目錄 | 相對路徑的基準目錄 |
-| `--buffer` | | `--buffer` | `BufferSize` | `1M` | 讀取緩衝區大小 |
-| `--threads` | `-t` | `--threads` | `usize` | CPU cores | 並行線程數 |
-| `--quiet` | `-q` | `--quiet` | flag | false | 僅顯示最終摘要 |
+**語意**：`verify` 會先嚴格解析清單；清單格式錯誤或沒有任何有效項目時直接回 `3`，
+不會回報「全部通過」。
 
-### 演算法推斷規則
+**範例**
 
-當未指定 `--algo` 時，從 hash 檔副檔名推斷：
-
-| 副檔名 | 演算法 |
-|---|---|
-| `.md5` | MD5 |
-| `.sha1` | SHA-1 |
-| `.sha256` | SHA-256 |
-| `.sha512` | SHA-512 |
-| `.sha3_256` | SHA3-256 |
-| `.blake3-*` | BLAKE3 |
-| ... | ... |
-
-### 輸出
-
-```
-ℹ 驗證 checksums.sha256 （演算法: SHA-256 根目錄: /data）
-
-✔ /data/file1.txt
-✔ /data/file2.bin
-✘ /data/file3.log  預期 hash 不匹配 (實際: abcd1234...)
-
-✔ 驗證完成: 878 個檔案, 877 匹配, 1 不匹配, 0 錯誤
+```bash
+oneechk verify release.sha256
+oneechk verify release.sha256 -r ./dist
+oneechk verify release.sha256 --format json > report.json
+oneechk verify release.sha256 --report report.json
 ```
 
-### 安全防護
-
-- **Path Traversal**: `../../etc/passwd` 型路徑會立即被拒絕
-- **絕對路徑**: `/etc/shadow` 型路徑會被拒絕
-- **非法 hex**: 非十六進位 hash 行會被拒絕，驗證以格式錯誤結束
-
-### 退出碼
-
-| Code | 含義 |
-|---|---|
-| 0 | 所有檔案 hash 匹配 |
-| 1 | 至少一個檔案 hash 不匹配 |
-| 2 | I/O 錯誤 |
-| 3 | 參數錯誤 / hash 檔格式錯誤 |
-
-驗證清單中的每一筆非註解記錄都必須符合格式；損壞的記錄或沒有任何記錄的檔案會以 `3` 結束，不會略過後仍宣告驗證成功。逐檔讀取錯誤會回傳 `2`。若同時有讀取錯誤與 hash 不匹配，I/O 錯誤優先回傳 `2`。
+**退出碼**：`0` 全部相符；`1` 有不相符；`2` 讀取檔案或清單時發生 I/O 錯誤；`3` 清單格式錯誤；
+`4` 沒有可處理項目。
 
 ---
 
-## 3. `oneechk json` — JSON 目錄結構
+## `check`
 
-遞迴掃描目錄，輸出結構化 JSON 紀錄。
+驗證單一檔案或一段文字的雜湊，不需要清單檔。
 
-### 語法
-
+```bash
+oneechk check <PATH> --expect <HEX>... [OPTIONS]
+oneechk check --text <STRING> --expect <HEX>... [OPTIONS]
 ```
-oneechk json [OPTIONS] <PATH>
+
+| 選項 | 預設 | 說明 |
+| :--- | :--- | :--- |
+| `<PATH>` | 與 `--text` 互斥 | 要驗證的檔案 |
+| `--text <STRING>` | 與 `PATH` 互斥 | 要驗證的文字內容（UTF-8 位元組） |
+| `-e`, `--expect <HEX>` | 必填，可重複 | 期望的雜湊值；**任一相符即通過** |
+| `-a`, `--algo <ALGO>` | `sha256` | 使用的演算法 |
+| `--length <N>` | 演算法預設 | 輸出長度（bytes） |
+| `--ignore-case` | 關閉 | 比較時忽略十六進位大小寫 |
+
+**範例**
+
+```bash
+oneechk check ./download.zip -e 8ed3f6ad...
+oneechk check --text "hello" -a sha256 \
+  -e 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+oneechk check ./download.zip -e 8ED3F6AD... --ignore-case
 ```
 
-### JSON 結構
+**退出碼**：`0` 相符；`1` 不相符；`2` I/O 錯誤；`3` 參數或路徑錯誤。
+
+---
+
+## `diff`
+
+比對兩份清單，找出新增、移除與變更的檔案。
+
+```bash
+oneechk diff <OLD> <NEW> [--format human|csv|json]
+```
+
+| 參數 | 說明 |
+| :--- | :--- |
+| `<OLD>` | 舊清單 |
+| `<NEW>` | 新清單 |
+
+清單格式會自動偵測（shasum／BSD／CSV／JSON），以相對路徑為鍵、十六進位比較不分大小寫。
+
+**human 輸出**（stdout）：
+
+```text
++ data/c.txt
+- old/removed.txt
+~ data/a.txt 8ed3f6ad... -> 1b2a9c11...
+```
+
+摘要寫到 stderr：`差異: 1 新增, 0 移除, 0 變更, 2 未變`。
+
+**退出碼**：`0` 兩份完全相同；`1` 有差異；`2` I/O 錯誤；`3` 清單無法解析。
+
+---
+
+## `json`
+
+輸出目錄結構的 JSON。
+
+```bash
+oneechk json <PATH> [-o <OUTPUT>] [-q]
+```
+
+| 選項 | 預設 | 說明 |
+| :--- | :--- | :--- |
+| `<PATH>` | 必填 | 目錄 |
+| `-o`, `--output <PATH>` | `<名稱>.struct.json` | `-` 表示 stdout |
+| `-q`, `--quiet` | 關閉 | 不顯示訊息 |
+
+輸出結構：
 
 ```json
 {
-  "version": "0.1.0",
-  "generation_time": 1717200000,
-  "nodes": [{
-    "name": "dirname",
-    "is_dir": true,
-    "is_symlink": false,
-    "extension": null,
-    "size": 1048576,
-    "last_modified": 1717200000,
-    "created_at": 1717200000,
-    "children": [...],
-    "symlink_target": null
-  }]
+  "version": "2.1.0",
+  "generation_time": 1790000000,
+  "nodes": [
+    { "name": "data", "path": "data", "is_dir": true, "children": [] }
+  ]
 }
 ```
 
-### 欄位說明
+## `txt`
 
-| 欄位 | 類型 | 說明 |
-|---|---|---|
-| `name` | String | 節點名稱 |
-| `is_dir` | Bool | 是否為目錄 |
-| `is_symlink` | Bool | 是否為符號連結 |
-| `extension` | String or null | 副檔名 (小寫) |
-| `size` | u64 | 大小 (bytes)。目錄為所有子節點總和 |
-| `last_modified` | i64 or null | 最後修改時間 (Unix timestamp) |
-| `created_at` | i64 or null | 建立時間 (Unix timestamp) |
-| `children` | Array or null | 子節點列表 (目錄才有) |
-| `symlink_target` | String or null | 符號連結目標 |
-
----
-
-## 4. `oneechk txt` — 樹狀目錄結構
-
-輸出人類可讀的樹狀目錄結構。
-
-### 語法
-
-```
-oneechk txt [OPTIONS] <PATH>
-```
-
-### 大小顯示格式
-
-| 值 | 說明 | 範例 |
-|---|---|---|
-| `binary` | 1024 為底 | `1.00 KiB`, `2.50 MiB` |
-| `decimal` | 1000 為底 | `1.00 KB`, `2.50 MB` |
-| `raw` | 原始位元組 + 逗號 | `1,234 B`, `1,234,567 B` |
-
-### 輸出編碼
-
-- 樹枝符號使用 Unicode `├──`, `└──`, `│`
-- 時間格式: `YYYY-MM-DD HH:MM:SS +TZ`
-- 空欄位不顯示
-
----
-
-## 5. 共用特性
-
-### Buffer Size 格式
-
-`--buffer` 參數支援人類可讀的後綴：
-
-| 後綴 | 倍數 | 範例 |
-|---|---|---|
-| (無) | 1 | `4096` = 4096 bytes |
-| `K` | 1024 | `4K` = 4096 bytes |
-| `M` | 1024² | `1M` = 1,048,576 bytes |
-| `G` | 1024³ | `2G` = 2,147,483,648 bytes |
-
-### 安靜模式 (`-q`)
-
-- 不顯示進度條 (`hash`)
-- 不顯示逐檔訊息 (`verify`, 僅顯示最終摘要)
-- 不顯示儲存成功訊息 (`json`, `txt`)
-- CLI 參數錯誤回傳 `3`；`--help`、`--version` 回傳 `0`
-
-### stdout 輸出 (`-o -`)
-
-指定 `-o -` 時，資料輸出到 stdout 而非檔案：
+輸出樹狀目錄文字（適合終端閱讀或貼進 issue）。
 
 ```bash
-oneechk hash /data -o - -q | sha256sum -c
-oneechk json /data -o - -q | jq '.nodes[0].children | length'
+oneechk txt <PATH> [-o <OUTPUT>] [-s binary|decimal|raw] [-m] [-c] [-q]
+```
+
+| 選項 | 預設 | 說明 |
+| :--- | :--- | :--- |
+| `-o`, `--output <PATH>` | `<名稱>.tree.txt` | `-` 表示寫到 stdout（不加時寫入檔案，不印到終端機） |
+| `-s`, `--size <MODE>` | 不顯示 | `binary`（KiB）、`decimal`（KB）、`raw`（bytes） |
+| `-m`, `--modified` | 關閉 | 顯示最後修改時間 |
+| `-c`, `--created` | 關閉 | 顯示建立時間 |
+
+輸出開頭會有三行註解（分隔線與產生時間），主體為樹狀結構：
+
+```text
+# ******************************
+# Generation Time: 2026-10-24 13:56:41 +0800
+# ******************************
+
+data (9 B)
+├── a.txt (5 B)
+└── b.txt (4 B)
 ```
 
 ---
 
-## 6. 效能調校
+## 輸出格式詳解
 
-### 多演算法單次 I/O（v2.0.1 新增）
+以下為實際輸出（`data/` 內含 `a.txt`、`b.txt`）。
 
-當指定多個 `-a` 參數（如 `-a sha256 -a blake3`）時，Onee Checker **自動啟用單次 I/O 優化**：
+### `hash` 的 `shasum`／`human`
 
-- **一次 `File::open` + 一次 read loop**，同時更新所有 hasher
-- 相比逐個演算法計算，I/O 量從 N 倍降為 1 倍
-- 對於 HDD 和大量小檔案的場景效益最顯著
-
-```bash
-# 這兩條指令的 I/O 量差異：
-oneechk hash /data -a sha256 -a blake3        # 單次 I/O（v2.1）
-cargo run --release -- hash /data -a sha256 && \
-  cargo run --release -- hash /data -a blake3  # 兩次 I/O（舊版行為）
+```text
+8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8  data/a.txt
+f44e64e75f3948e9f73f8dfa94721c4ce8cbb4f265c4790c702b2d41cfbf2753  data/b.txt
 ```
 
-### BLAKE3 大檔案多線程（v2.0.1 新增）
+兩個空白分隔、路徑以 `/` 分隔（跨平台一致）、可直接餵給 `sha256sum -c`。
 
-BLAKE3 對 256 MiB ~ 1 GiB 之間的檔案自動啟用內部多線程樹狀 hash：
+### `hash` 的 `bsd`
 
-| 檔案大小 | 模式 | 說明 |
-|----------|------|------|
-| < 256 MiB | 串流 `update()` | 單線程 SIMD 加速，記憶體 O(1) |
-| 256 MiB ~ 1 GiB | 多線程 `blake3::hash()` | 一次載入 + 樹狀 hash，3-8x 加速 |
-| > 1 GiB | 串流 `update()` | 避免 OOM，降級回單線程 |
-
-### 儲存裝置調校
-
-```bash
-# SSD / NVMe：高並行、大 buffer
-oneechk hash /ssd/data --buffer 4M -t 8
-
-# HDD：減少線程避免磁頭 thrashing
-oneechk hash /hdd/data --buffer 64K -t 2
-
-# 大量小檔案（< 64K）：最小 buffer、高並行
-oneechk hash /many-small-files --buffer 512B -t 16
+```text
+sha-256 (data/a.txt) = 8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8
 ```
 
-## 7. 進階用法
+### `hash` 的 `csv`
 
-### CI/CD 管線中的完整性驗證
-
-```bash
-#!/bin/bash
-# 生成 hash
-oneechk hash ./dist -a sha256 -o dist.sha256 -q
-
-# 傳輸後驗證
-oneechk verify dist.sha256 -r ./received -q
-if [ $? -ne 0 ]; then
-    echo "❌ 檔案完整性驗證失敗！"
-    exit 1
-fi
-echo "✅ 驗證通過"
+```csv
+8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8,data/a.txt
 ```
 
-### 目錄快照比對
+### `hash` 的 `json` / `ndjson`
 
-```bash
-# 生成快照
-oneechk json /data -o snapshot_before.json -q
+每行一個物件（NDJSON 風格，適合串流處理）：
 
-# ... 目錄變更 ...
-
-# 生成新快照並比對
-oneechk json /data -o snapshot_after.json -q
-diff <(jq -S . snapshot_before.json) <(jq -S . snapshot_after.json)
+```json
+{"algorithm":"sha-256","hash":"8ed3f6ad...","path":"data/a.txt"}
 ```
 
-### 大量檔案最佳化
+### `verify` 的 `json`（完整報告）
+
+```json
+{
+  "version": "2.1.0",
+  "command": "verify",
+  "hashfile": "data.sha256",
+  "algorithm": "SHA-256",
+  "root": "C:\\work\\demo",
+  "summary": { "total": 2, "matched": 2, "mismatched": 0, "errors": 0, "missing": 0 },
+  "exit_code": 0,
+  "entries": [
+    {
+      "path": "data/a.txt",
+      "status": "match",
+      "expected": "8ed3f6ad...",
+      "actual": "8ed3f6ad...",
+      "error": null
+    }
+  ]
+}
+```
+
+`entries[].status` 可能值：`match`、`mismatch`、`error`、`missing`。
+
+### `verify` 的 `ndjson`
+
+逐筆 entry 一行，最後一行為摘要：
+
+```json
+{"path":"data/a.txt","status":"match","expected":"8ed3f6ad...","actual":"8ed3f6ad...","error":null}
+{"summary":{"total":2,"matched":2,"mismatched":0,"errors":0,"missing":0}}
+```
+
+### `verify` 的 `csv`
+
+```csv
+path,status,expected,actual
+data/a.txt,match,8ed3f6ad...,8ed3f6ad...
+```
+
+### `check` 的 `json`
+
+```json
+{"path":"data/a.txt","status":"match","expected":"8ed3f6ad...","actual":"8ed3f6ad...","error":null}
+```
+
+### `diff` 的 `json`
+
+```json
+{"added":["data/c.txt"],"removed":[],"changed":[],"unchanged":2}
+```
+
+`changed` 的每一項為 `{"path","old_hash","new_hash"}`。
+
+### `diff` 的 `csv`
+
+```csv
+kind,path,old_hash,new_hash
+added,data/c.txt,,
+changed,data/a.txt,8ed3f6ad...,1b2a9c11...
+```
+
+---
+
+## 退出碼與 CI 用法
+
+| 代碼 | 意義 | 常見來源 |
+| :---: | :--- | :--- |
+| `0` | 成功 | 全部相符／無差異 |
+| `1` | 驗證失敗 | `verify` 有不符、`check` 不匹配、`diff` 有差異 |
+| `2` | 執行或 I/O 錯誤 | 檔案讀取失敗、權限不足 |
+| `3` | 用法或輸入錯誤 | 參數錯誤、清單格式錯誤、路徑不存在 |
+| `4` | 無可處理項目 | 目錄內沒有檔案 |
+
+**GitHub Actions / bash**
 
 ```bash
-# SSD 環境：較大 buffer 減少 syscall
-oneechk hash /ssd/data --buffer 4M -t 8
-
-# HDD 環境：減少線程避免磁頭 thrashing
-oneechk hash /hdd/data --buffer 64K -t 1
+set -euo pipefail
+cargo install --path .
+oneechk hash ./dist -a sha256
+oneechk verify dist.sha256 -r ./dist --format json > verify.json
 ```
+
+**PowerShell**
+
+```powershell
+$ErrorActionPreference = 'Stop'
+oneechk verify dist.sha256 -r ./dist -q
+if ($LASTEXITCODE -ne 0) { throw "驗證失敗（exit=$LASTEXITCODE）" }
+```
+
+> 只有 `0` 代表完全成功。若只需要「有差異就讓 CI 失敗」，直接依賴退出碼即可，
+> 不要解析 stderr 的文字。
+
+## 與 GNU coreutils 的相容性
+
+- `hash` 的 `shasum` 輸出 `<hex>  <path>` 與 `sha256sum` 相同，可用來產生可被 `sha256sum -c` 驗證的清單。
+- `verify` 接受 `sha256sum` 產生的清單；`*`（binary mode）前綴會被正確處理。
+- 差異：`oneechk` 支援多演算法與可變長度、輸出多種格式、退出碼分成四類；
+  `sha256sum -c` 只有成功/失敗二值。
+
+## 常見錯誤與排解
+
+| 訊息 | 原因 | 處置 |
+| :--- | :--- | :--- |
+| `無效路徑: 路徑不存在或不是目錄` | `hash`/`json`/`txt` 的目標不存在 | 確認路徑；`verify`/`check` 請用檔案路徑 |
+| `無法從副檔名推斷演算法，請使用 --algo 手動指定` | 清單副檔名不是 `sha256`、`md5` 等 | 加 `-a sha256` |
+| `manifest 沒有有效項目` | 清單為空或格式不符 | 確認清單內容，或改用 `--format shasum` 產生 |
+| `無可處理的項目`（exit 4） | 目錄內沒有檔案 | 確認目錄；空目錄不是錯誤，但沒有可計算項 |
+| 驗證結果出現 `expected: null` | 清單中的相對路徑與實際檔案路徑不一致 | 用 `-r` 指定正確根目錄 |
+| 路徑含逗號的清單被誤判格式 | 自動偵測以逗號判斷 CSV | 改用明確格式的清單，或先以 `--format shasum` 重新產生 |
