@@ -50,6 +50,10 @@ pub enum OneeError {
     /// 其他使用者輸入錯誤
     #[error("參數錯誤: {0}")]
     ArgumentError(String),
+
+    /// 無可處理的項目
+    #[error("無可處理的項目")]
+    NothingToDo,
 }
 
 impl OneeError {
@@ -64,6 +68,7 @@ impl OneeError {
             | Self::UnsupportedAlgorithm(_)
             | Self::HashFileParseError { .. }
             | Self::ArgumentError(_) => 3,
+            Self::NothingToDo => 4,
         }
     }
 }

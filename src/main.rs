@@ -6,12 +6,11 @@
 //! 設計原則：
 //! - stdout → 機器可解析的資料（hash 檔內容、JSON、純文字樹）
 //! - stderr → 人類可讀的訊息（進度、錯誤、狀態）
-//! - exit code → 0=成功 1=hash不匹配 2=執行/I/O錯誤 3=參數或格式錯誤
+//! - exit code → 0=成功 1=hash不匹配 2=執行/I/O錯誤 3=參數或格式錯誤 4=無可處理項目
 
 use std::fs::File;
 use std::io::{stdout, BufWriter, Write};
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -30,6 +29,7 @@ use onee_checker::hash::{
     compute_multi_hashes_parallel_with_pool,
 };
 use onee_checker::hash::{verify_hash_file, verify_hash_file_with_pool};
+use onee_checker::report::{EntryReport, EntryStatus, VerifyReport};
 use onee_checker::tree::{write_tree, SizeFormat, TreeOption};
 use std::time::SystemTime;
 
@@ -48,16 +48,23 @@ fn main() {
         }
     };
 
+    if cli.no_color {
+        console::set_colors_enabled(false);
+    }
+
     let result = match cli.command {
-        Commands::Hash(args) => cmd_hash(args),
-        Commands::Verify(args) => cmd_verify(args),
-        Commands::Json(args) => cmd_json(args),
-        Commands::Txt(args) => cmd_txt(args),
+        Commands::Hash(args) => cmd_hash(args, cli.format).map(|()| 0),
+        Commands::Verify(args) => cmd_verify(args, cli.format),
+        Commands::Json(args) => cmd_json(args).map(|()| 0),
+        Commands::Txt(args) => cmd_txt(args).map(|()| 0),
     };
 
-    if let Err(err) = result {
-        eprintln!("{} {}", style("✘").red(), err);
-        std::process::exit(err.exit_code());
+    match result {
+        Ok(code) => std::process::exit(code),
+        Err(err) => {
+            eprintln!("{} {}", style("✘").red(), err);
+            std::process::exit(err.exit_code());
+        }
     }
 }
 
@@ -66,12 +73,17 @@ fn main() {
 // ──────────────────────────────────────────────────────────
 
 #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
-fn cmd_hash(args: cli::HashArgs) -> Result<()> {
-    let path = &args.path;
+fn cmd_hash(args: cli::HashArgs, format: onee_checker::report::OutputFormat) -> Result<()> {
+    if args.digest_only
+        && args.output.is_some()
+        && args.output.as_ref().unwrap().to_string_lossy() != "-"
+    {
+        return Err(OneeError::ArgumentError("指定 --digest-only 時 --output 必須為 '-'".into()));
+    }
 
+    let path = &args.path;
     validate_path(path).map_err(OneeError::InvalidPath)?;
 
-    // 如果沒有指定 algo，預設使用 SHA-256
     let algos: Vec<(HashAlgo, HashType)> = if args.algo.is_empty() {
         vec![(HashAlgo::Sha256, HashType::SHA256)]
     } else {
@@ -88,7 +100,6 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
             .collect::<Result<Vec<(HashAlgo, HashType)>>>()?
     };
 
-    // 設定線程池（局部池，不影響 global pool）
     let pool: Option<ThreadPool> = args
         .threads
         .map(|n| {
@@ -99,29 +110,15 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
         })
         .transpose()?;
 
-    // 收集檔案
     let files = list_files(path)?;
     if files.is_empty() {
-        eprintln!("{} 警告: 指定路徑下無任何檔案", style("⚠").yellow());
-        return Ok(());
+        return Err(OneeError::NothingToDo);
     }
 
     let buffer_size = args.buffer.0;
 
-    // ── 多演算法優化：使用 compute_multi_hashes_parallel 單次 I/O ──
     if algos.len() > 1 {
         let all_hash_types: Vec<HashType> = algos.iter().map(|(_, ht)| ht.clone()).collect();
-
-        // 進度條（單次掃描）
-        if !args.quiet {
-            eprintln!(
-                "{} 單次掃描計算 {} 種演算法: {}",
-                style("ℹ").cyan(),
-                algos.len(),
-                all_hash_types.iter().map(HashType::display_name).collect::<Vec<_>>().join(", ")
-            );
-        }
-
         let pb: Option<ProgressBar> = if args.quiet {
             None
         } else {
@@ -135,7 +132,6 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
             Some(bar)
         };
 
-        // 單次 I/O 計算所有演算法
         let all_results = match &pool {
             Some(p) => {
                 compute_multi_hashes_parallel_with_pool(p, &files, &all_hash_types, buffer_size)
@@ -146,15 +142,15 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
         let mut first_error = None;
         for (i, (_, hash_type)) in algos.iter().enumerate() {
             let mut hash_data: Vec<HashData> = Vec::with_capacity(files.len());
-
             for result in &all_results[i] {
                 match result {
-                    Ok(data) => {
-                        hash_data.push(data.clone());
-                    }
+                    Ok(data) => hash_data.push(data.clone()),
                     Err(e) => {
                         if first_error.is_none() {
                             first_error = Some(OneeError::Io(std::io::Error::other(e.to_string())));
+                        }
+                        if args.strict {
+                            break;
                         }
                         if i == 0 {
                             eprintln!("{} 錯誤: {e}", style("✘").red());
@@ -168,26 +164,35 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
                 }
             }
 
+            if args.strict {
+                if let Some(err) = first_error.take() {
+                    return Err(err);
+                }
+            }
+
             hash_data.sort_by(|a, b| a.path.cmp(&b.path));
-            if first_error.is_none() {
-                save_hash_results(&hash_data, hash_type, path, args.output.as_ref())?;
+            if args.digest_only || first_error.is_none() {
+                save_hash_results(
+                    &hash_data,
+                    hash_type,
+                    path,
+                    args.output.as_ref(),
+                    format,
+                    args.digest_only,
+                    true,
+                )?;
             }
         }
-
         if let Some(bar) = pb {
             bar.finish_and_clear();
         }
-
         return match first_error {
             Some(error) => Err(error),
             None => Ok(()),
         };
     }
 
-    // ── 單一演算法：維持既有路徑 ──
     let (_, hash_type) = &algos[0];
-
-    // 進度條
     let pb: Option<ProgressBar> = if args.quiet {
         None
     } else {
@@ -203,23 +208,23 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
         Some(bar)
     };
 
-    // 並行計算（使用指定 pool 或 global pool）
     let results = match &pool {
         Some(p) => compute_hashes_parallel_with_pool(p, &files, hash_type, buffer_size),
         None => compute_hashes_parallel(&files, hash_type, buffer_size),
     };
-    let mut hash_data: Vec<HashData> = Vec::with_capacity(results.len());
 
+    let mut hash_data: Vec<HashData> = Vec::with_capacity(results.len());
     let mut first_error = None;
     for result in results {
         match result {
-            Ok(data) => {
-                hash_data.push(data);
-            }
+            Ok(data) => hash_data.push(data),
             Err(e) => {
                 eprintln!("{} 錯誤: {e}", style("✘").red());
                 if first_error.is_none() {
                     first_error = Some(e);
+                }
+                if args.strict {
+                    break;
                 }
             }
         }
@@ -227,65 +232,84 @@ fn cmd_hash(args: cli::HashArgs) -> Result<()> {
             bar.inc(1);
         }
     }
-
     if let Some(bar) = pb {
         bar.finish_and_clear();
     }
-
-    if let Some(error) = first_error {
-        return Err(error);
+    if args.strict {
+        if let Some(err) = first_error.take() {
+            return Err(err);
+        }
     }
 
     hash_data.sort_by(|a, b| a.path.cmp(&b.path));
-    save_hash_results(&hash_data, hash_type, path, args.output.as_ref())?;
-
+    save_hash_results(
+        &hash_data,
+        hash_type,
+        path,
+        args.output.as_ref(),
+        format,
+        args.digest_only,
+        false,
+    )?;
     Ok(())
 }
 
-/// 將 hash 結果寫入 stdout
-fn write_hash_to_stdout(data: &[HashData], root: &Path) -> Result<()> {
-    let mut stdout = BufWriter::new(stdout().lock());
-    for entry in data {
-        let rel_path = entry.path.strip_prefix(root).unwrap_or(&entry.path);
-        let path_str = rel_path.to_string_lossy().replace('\\', "/");
-        writeln!(stdout, "{} *{}", entry.hash_hex(), path_str).map_err(OneeError::Io)?;
-    }
-    stdout.flush().map_err(OneeError::Io)?;
-    Ok(())
-}
-
-/// 將 hash 計算結果儲存到指定的輸出目標。
-///
-/// `output` 為 `Some("-")` 時寫入 stdout，`Some(path)` 時寫入檔案，
-/// `None` 時自動產生預設檔名。
 fn save_hash_results(
     hash_data: &[HashData],
     hash_type: &HashType,
     path: &Path,
     output: Option<&PathBuf>,
+    format: onee_checker::report::OutputFormat,
+    digest_only: bool,
+    multi_algo: bool,
 ) -> Result<()> {
     let root = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
-        Some(_) => Path::new("."),
-        None => path,
+        _ => Path::new("."),
     };
-    let default_name = format!(
-        "{}.{}",
-        path.file_name().unwrap_or_default().to_string_lossy(),
-        hash_type.suffix()
-    );
+
+    // `--digest-only`：只輸出 hex 值（多演算法時加上演算法前綴）
+    if digest_only {
+        let mut stdout = BufWriter::new(stdout().lock());
+        for entry in hash_data {
+            if multi_algo {
+                writeln!(stdout, "{}: {}", hash_type.display_name(), entry.hash_hex())
+                    .map_err(OneeError::Io)?;
+            } else {
+                writeln!(stdout, "{}", entry.hash_hex()).map_err(OneeError::Io)?;
+            }
+        }
+        stdout.flush().map_err(OneeError::Io)?;
+        return Ok(());
+    }
 
     match output {
         Some(out) if out.to_string_lossy() == "-" => {
-            write_hash_to_stdout(hash_data, root)?;
+            let mut stdout = BufWriter::new(stdout().lock());
+            for entry in hash_data {
+                let rel_path = entry.path.strip_prefix(root).unwrap_or(&entry.path);
+                let path_str = rel_path.to_string_lossy().replace('\\', "/");
+                onee_checker::report::write_hash_line(
+                    &mut stdout,
+                    format,
+                    hash_type.display_name(),
+                    &entry.hash_hex(),
+                    &path_str,
+                )
+                .map_err(OneeError::Io)?;
+            }
+            stdout.flush().map_err(OneeError::Io)?;
         }
         Some(out) => {
-            let out_path: &Path = out.as_path();
-            save_hash_file(hash_data, out_path, root)?;
+            save_hash_file(hash_data, out.as_path(), root)?;
             eprintln!("{} 已儲存: {}", style("✔").green(), out.display());
         }
         None => {
-            let output_path = root.join(&default_name);
+            let output_path = root.join(format!(
+                "{}.{}",
+                path.file_name().unwrap_or_default().to_string_lossy(),
+                hash_type.suffix()
+            ));
             save_hash_file(hash_data, &output_path, root)?;
             eprintln!("{} 已儲存: {}", style("✔").green(), output_path.display());
         }
@@ -297,14 +321,13 @@ fn save_hash_results(
 //  verify 子命令
 // ──────────────────────────────────────────────────────────
 
-fn cmd_verify(args: cli::VerifyArgs) -> Result<()> {
+#[allow(clippy::too_many_lines)]
+fn cmd_verify(args: cli::VerifyArgs, format: onee_checker::report::OutputFormat) -> Result<i32> {
     let hashfile = &args.hashfile;
-
     if !hashfile.exists() || !hashfile.is_file() {
         return Err(OneeError::InvalidPath(format!("Hash 檔不存在: {}", hashfile.display())));
     }
 
-    // 從副檔名推斷演算法
     let hash_type = if let Some(algo) = &args.algo {
         algo.to_hash_type(None)?
     } else {
@@ -312,20 +335,25 @@ fn cmd_verify(args: cli::VerifyArgs) -> Result<()> {
             hashfile.extension().map(|e| e.to_string_lossy().to_lowercase()).ok_or_else(|| {
                 OneeError::ArgumentError("無法從副檔名推斷演算法，請使用 --algo 手動指定".into())
             })?;
-        let algo = HashAlgo::from_suffix(&ext).ok_or_else(|| {
-            OneeError::UnsupportedAlgorithm(format!("無法從副檔名 .{ext} 推斷演算法"))
-        })?;
-        algo.to_hash_type(None)?
+        HashAlgo::from_suffix(&ext)
+            .ok_or_else(|| {
+                OneeError::UnsupportedAlgorithm(format!("無法從副檔名 .{ext} 推斷演算法"))
+            })?
+            .to_hash_type(None)?
     };
 
-    let root_dir: PathBuf = args.root.unwrap_or_else(|| {
-        let parent = hashfile.parent().unwrap_or(Path::new("."));
-        if parent.as_os_str().is_empty() {
-            PathBuf::from(".")
-        } else {
-            parent.to_path_buf()
-        }
-    });
+    let root_dir: PathBuf =
+        args.root.unwrap_or_else(|| hashfile.parent().unwrap_or(Path::new(".")).to_path_buf());
+
+    // 先嚴格驗證 manifest：格式錯誤或無有效項目屬於輸入錯誤（exit 3）
+    let content = std::fs::read_to_string(hashfile).map_err(OneeError::Io)?;
+    let parsed_entries = onee_checker::fs::parse_hash_file_strict(&content)?;
+    if parsed_entries.is_empty() {
+        return Err(OneeError::HashFileParseError {
+            line: 0,
+            detail: "manifest 沒有有效項目".into(),
+        });
+    }
 
     if !args.quiet {
         eprintln!(
@@ -337,10 +365,7 @@ fn cmd_verify(args: cli::VerifyArgs) -> Result<()> {
         );
     }
 
-    let buffer_size = args.buffer.0;
-
-    // 設定線程池（局部池，不影響 global pool）
-    let pool: Option<ThreadPool> = args
+    let results = match args
         .threads
         .map(|n| {
             ThreadPoolBuilder::new()
@@ -348,65 +373,96 @@ fn cmd_verify(args: cli::VerifyArgs) -> Result<()> {
                 .build()
                 .map_err(|e| OneeError::ArgumentError(format!("線程池建立失敗: {e}")))
         })
-        .transpose()?;
-
-    // 驗證（使用指定 pool 或 global pool）
-    let results = match &pool {
-        Some(p) => verify_hash_file_with_pool(p, hashfile, &hash_type, &root_dir, buffer_size),
-        None => verify_hash_file(hashfile, &hash_type, &root_dir, buffer_size),
+        .transpose()?
+    {
+        Some(p) => verify_hash_file_with_pool(&p, hashfile, &hash_type, &root_dir, args.buffer.0),
+        None => verify_hash_file(hashfile, &hash_type, &root_dir, args.buffer.0),
     };
 
-    let mut total = 0usize;
-    let mut matched = 0usize;
-    let mut mismatched = 0usize;
-    let mut errors = 0usize;
-    let mut first_error = None;
-
+    let mut entries = Vec::new();
     for result in results {
-        total += 1;
         match result {
-            Ok((path, true, _)) => {
-                matched += 1;
-                if !args.quiet {
-                    eprintln!("{} {}", style("✔").green(), path.display());
-                }
-            }
-            Ok((path, false, actual)) => {
-                mismatched += 1;
-                eprintln!(
-                    "{} {}  預期 hash 不匹配 (實際: {actual})",
-                    style("✘").red(),
-                    path.display()
-                );
+            Ok((path, matched, actual)) => {
+                let status = if matched { EntryStatus::Match } else { EntryStatus::Mismatch };
+                let rel =
+                    path.strip_prefix(&root_dir).unwrap_or(&path).to_string_lossy().into_owned();
+                let mut entry = EntryReport::new(rel, status);
+                entry.actual = Some(actual);
+                entries.push(entry);
             }
             Err(e) => {
-                errors += 1;
-                eprintln!("{} 錯誤: {e}", style("✘").red());
-                if first_error.is_none() {
-                    first_error = Some(e);
+                let mut entry = EntryReport::new(e.to_string(), EntryStatus::Error);
+                entry.error = Some(e.to_string());
+                entries.push(entry);
+                if args.strict {
+                    return Err(OneeError::Io(std::io::Error::other(e.to_string())));
                 }
             }
         }
     }
 
-    eprintln!(
-        "{} 驗證完成: {total} 個檔案, {matched} 匹配, {mismatched} 不匹配, {errors} 錯誤",
-        if mismatched == 0 && errors == 0 { style("✔").green() } else { style("✘").red() }
-    );
-
-    if let Some(error) = first_error {
-        return Err(error);
-    }
-
-    if mismatched > 0 {
-        return Err(OneeError::HashMismatch {
-            path: hashfile.clone(),
-            expected: format!("{mismatched} 個檔案不匹配"),
-            actual: "見上方錯誤列表".into(),
+    if entries.is_empty() {
+        return Err(OneeError::HashFileParseError {
+            line: 0,
+            detail: "manifest 沒有有效項目".into(),
         });
     }
 
-    Ok(())
+    let mut report = VerifyReport {
+        version: "2.1.0".into(),
+        command: "verify".into(),
+        hashfile: hashfile.to_string_lossy().into_owned(),
+        algorithm: hash_type.display_name().into(),
+        root: root_dir.to_string_lossy().into_owned(),
+        summary: onee_checker::report::VerifySummary::from_entries(&entries),
+        exit_code: 0,
+        entries,
+    };
+    report.exit_code = report.compute_exit_code();
+
+    if format == onee_checker::report::OutputFormat::Human {
+        for entry in &report.entries {
+            if !args.quiet {
+                match entry.status {
+                    EntryStatus::Match => eprintln!("{} {}", style("✔").green(), entry.path),
+                    EntryStatus::Mismatch => eprintln!(
+                        "{} {} 預期 hash 不匹配 (實際: {})",
+                        style("✘").red(),
+                        entry.path,
+                        entry.actual.as_deref().unwrap_or("?")
+                    ),
+                    EntryStatus::Error => eprintln!(
+                        "{} 錯誤: {}",
+                        style("✘").red(),
+                        entry.error.as_deref().unwrap_or("未知")
+                    ),
+                    EntryStatus::Missing => {
+                        if !args.ignore_missing {
+                            eprintln!("{} 缺失: {}", style("✘").red(), entry.path);
+                        }
+                    }
+                }
+            }
+        }
+        eprintln!(
+            "{} 驗證完成: {} 個檔案, {} 匹配, {} 不匹配, {} 錯誤",
+            if report.exit_code == 0 { style("✔").green() } else { style("✘").red() },
+            report.summary.total,
+            report.summary.matched,
+            report.summary.mismatched,
+            report.summary.errors
+        );
+    } else {
+        onee_checker::report::write_verify_report(&mut stdout().lock(), format, &report)
+            .map_err(OneeError::Io)?;
+    }
+
+    if let Some(out) = args.report {
+        let file = File::create(out).map_err(OneeError::Io)?;
+        serde_json::to_writer_pretty(file, &report).map_err(OneeError::Serde)?;
+    }
+
+    Ok(report.exit_code)
 }
 
 // ──────────────────────────────────────────────────────────
@@ -416,11 +472,9 @@ fn cmd_verify(args: cli::VerifyArgs) -> Result<()> {
 #[allow(clippy::needless_pass_by_value)]
 fn cmd_json(args: cli::JsonArgs) -> Result<()> {
     let path = &args.path;
-
     if !path.exists() || !path.is_dir() {
         return Err(OneeError::InvalidPath(format!("路徑不存在或不是目錄: {}", path.display())));
     }
-
     if !args.quiet {
         eprintln!("{} 掃描目錄結構: {}", style("ℹ").cyan(), path.display());
     }
@@ -454,7 +508,6 @@ fn cmd_json(args: cli::JsonArgs) -> Result<()> {
             }
         }
     }
-
     Ok(())
 }
 
@@ -465,7 +518,6 @@ fn cmd_json(args: cli::JsonArgs) -> Result<()> {
 #[allow(clippy::needless_pass_by_value)]
 fn cmd_txt(args: cli::TxtArgs) -> Result<()> {
     let path = &args.path;
-
     if !path.exists() || !path.is_dir() {
         return Err(OneeError::InvalidPath(format!("路徑不存在或不是目錄: {}", path.display())));
     }
@@ -478,7 +530,6 @@ fn cmd_txt(args: cli::TxtArgs) -> Result<()> {
 
     let option =
         TreeOption { size: size_format, last_modified: args.modified, created_at: args.created };
-
     let current_dir = std::env::current_dir().map_err(OneeError::Io)?;
     let default_name =
         format!("{}.{}", path.file_name().unwrap_or_default().to_string_lossy(), "tree.txt");
@@ -506,6 +557,5 @@ fn cmd_txt(args: cli::TxtArgs) -> Result<()> {
             }
         }
     }
-
     Ok(())
 }

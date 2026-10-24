@@ -34,6 +34,8 @@ pub mod error;
 pub mod fs;
 pub mod hash;
 pub mod hasher;
+pub mod manifest;
+pub mod report;
 pub mod tree;
 
 /// 為 embedder 提供的便利 prelude

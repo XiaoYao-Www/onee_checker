@@ -28,6 +28,14 @@ use clap::{Parser, Subcommand};
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
+
+    /// 輸出格式
+    #[arg(long, global = true, value_enum, default_value_t = crate::report::OutputFormat::Human)]
+    pub format: crate::report::OutputFormat,
+
+    /// 關閉色彩輸出
+    #[arg(long, global = true)]
+    pub no_color: bool,
 }
 
 #[derive(Subcommand)]

@@ -45,4 +45,12 @@ pub struct HashArgs {
     /// 安靜模式 — 不顯示進度條
     #[arg(short, long)]
     pub quiet: bool,
+
+    /// 僅輸出 hash 值
+    #[arg(long)]
+    pub digest_only: bool,
+
+    /// 嚴格模式：遇錯誤立即中止
+    #[arg(long)]
+    pub strict: bool,
 }

@@ -36,8 +36,23 @@ pub fn compute_hash_reader<R: Read>(
 /// BLAKE3 啟用多線程的最小檔案大小（256 MiB）
 const BLAKE3_PARALLEL_THRESHOLD: u64 = 256 * 1024 * 1024;
 
-/// BLAKE3 載入整個檔案的最大大小（1 GiB），避免 OOM
-const BLAKE3_BULK_MAX_SIZE: u64 = 1024 * 1024 * 1024;
+/// BLAKE3 一次載入整檔的上限（預設 512 MiB），避免大檔造成 OOM。
+///
+/// 可用環境變數 `ONEE_BLAKE3_BULK_MAX_MB` 覆寫（單位 MiB，`0` 表示停用整檔載入）。
+const BLAKE3_BULK_MAX_SIZE: u64 = 512 * 1024 * 1024;
+
+/// 由覆寫值（MiB）計算 BLAKE3 bulk 上限（bytes）。
+fn blake3_bulk_limit_from(override_mb: Option<u64>) -> u64 {
+    override_mb.map_or(BLAKE3_BULK_MAX_SIZE, |mb| mb.saturating_mul(1024 * 1024))
+}
+
+/// 取得 BLAKE3 bulk 上限（bytes），支援 `ONEE_BLAKE3_BULK_MAX_MB` 覆寫。
+fn blake3_bulk_limit() -> u64 {
+    let override_mb = std::env::var("ONEE_BLAKE3_BULK_MAX_MB")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok());
+    blake3_bulk_limit_from(override_mb)
+}
 
 /// 計算單一檔案的 hash 值。
 ///
@@ -58,11 +73,11 @@ pub fn compute_file_hash(
         ));
     }
 
-    // BLAKE3 大檔案優化 — 一次載入 + 多線程樹狀 hash
+    // BLAKE3 大檔案優化 — 一次載入 + 多線程樹狀 hash（受記憶體上限約束）
     if let HashType::BLAKE3(_) = hash_type {
-        let metadata = std::fs::metadata(path)?;
-        let file_size = metadata.len();
-        if (BLAKE3_PARALLEL_THRESHOLD..=BLAKE3_BULK_MAX_SIZE).contains(&file_size) {
+        let file_size = std::fs::metadata(path)?.len();
+        let bulk_limit = blake3_bulk_limit();
+        if (BLAKE3_PARALLEL_THRESHOLD..=bulk_limit).contains(&file_size) {
             return compute_blake3_bulk_path(path, hash_type);
         }
     }
@@ -74,7 +89,7 @@ pub fn compute_file_hash(
 
 /// 將整個檔案載入記憶體，使用 `blake3_hash_bulk()` 進行多線程 hash。
 ///
-/// 僅供 `compute_file_hash` 內部呼叫，檔案大小須在 256 MiB ~ 1 GiB 之間。
+/// 僅供 `compute_file_hash` 內部呼叫，檔案大小須介於 256 MiB 與 `blake3_bulk_limit()` 之間。
 fn compute_blake3_bulk_path(path: &Path, hash_type: &HashType) -> io::Result<Vec<u8>> {
     let mut file = File::open(path)?;
     let metadata = file.metadata()?;
@@ -83,6 +98,10 @@ fn compute_blake3_bulk_path(path: &Path, hash_type: &HashType) -> io::Result<Vec
     file.read_to_end(&mut data)?;
     let out_len = hash_type.default_length();
     Ok(blake3_hash_bulk(&data, out_len))
+}
+
+fn clamp_buffer_size(size: usize) -> usize {
+    size.clamp(4 * 1024, 64 * 1024 * 1024)
 }
 
 /// 並行計算多個檔案的 hash 值。
@@ -97,6 +116,7 @@ pub fn compute_hashes_parallel(
     hash_type: &HashType,
     buffer_size: usize,
 ) -> Vec<std::result::Result<HashData, OneeError>> {
+    let buffer_size = clamp_buffer_size(buffer_size);
     files
         .par_iter()
         .map_init(
@@ -122,6 +142,7 @@ pub fn compute_hashes_parallel_with_pool(
     hash_type: &HashType,
     buffer_size: usize,
 ) -> Vec<std::result::Result<HashData, OneeError>> {
+    let buffer_size = clamp_buffer_size(buffer_size);
     pool.install(|| {
         files
             .par_iter()
@@ -163,6 +184,7 @@ pub fn compute_multi_hashes_parallel(
     if hash_types.is_empty() {
         return vec![];
     }
+    let buffer_size = clamp_buffer_size(buffer_size);
 
     // 每個檔案計算所有演算法的結果
     let per_file_results: Vec<Vec<std::result::Result<HashData, OneeError>>> = files
@@ -280,6 +302,7 @@ pub fn verify_hash_file(
         Ok(c) => c,
         Err(e) => return vec![Err(OneeError::Io(e))],
     };
+    let buffer_size = clamp_buffer_size(buffer_size);
 
     // 安全地正規化根目錄
     let safe_root = match canonicalize_root(root_dir) {
@@ -329,6 +352,7 @@ pub fn verify_hash_file_with_pool(
         Ok(c) => c,
         Err(e) => return vec![Err(OneeError::Io(e))],
     };
+    let buffer_size = clamp_buffer_size(buffer_size);
 
     // 安全地正規化根目錄
     let safe_root = match canonicalize_root(root_dir) {
@@ -469,6 +493,37 @@ mod tests {
 
         let bad = verify_file_hash(&file_path, "000000", &HashType::SHA256, &mut buf).unwrap();
         assert!(!bad);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// BLAKE3 bulk 上限可由覆寫值調整（純函式，不依賴環境變數）
+    #[test]
+    fn test_blake3_bulk_limit_from() {
+        assert_eq!(blake3_bulk_limit_from(None), BLAKE3_BULK_MAX_SIZE);
+        assert_eq!(blake3_bulk_limit_from(Some(0)), 0);
+        assert_eq!(blake3_bulk_limit_from(Some(1)), 1024 * 1024);
+    }
+
+    /// 整檔載入（bulk）與串流兩條路徑必須產生相同 digest
+    #[test]
+    fn test_blake3_bulk_matches_streaming() {
+        let dir = std::env::temp_dir().join("onee_test_blake3_bulk");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let file_path = dir.join("bulk.bin");
+
+        let data: Vec<u8> = (0..64 * 1024).map(|i| (i % 251) as u8).collect();
+        fs::write(&file_path, &data).unwrap();
+
+        let hash_type = HashType::BLAKE3(32);
+        let bulk = compute_blake3_bulk_path(&file_path, &hash_type).unwrap();
+
+        let mut buf = vec![0u8; 8192];
+        let streamed = compute_file_hash(&file_path, &hash_type, &mut buf).unwrap();
+
+        assert_eq!(bulk, streamed);
+        assert_eq!(bulk.len(), 32);
 
         let _ = fs::remove_dir_all(&dir);
     }

@@ -46,7 +46,7 @@ fn test_cli_hash_default_algo() {
         .arg("-")
         .assert();
 
-    assert.success().stdout(predicate::str::contains("*hello.txt")).stdout(
+    assert.success().stdout(predicate::str::contains("  hello.txt")).stdout(
         predicate::str::contains(
             "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f",
         ),
@@ -171,7 +171,7 @@ fn test_cli_hash_blake3() {
         .arg("-")
         .assert();
 
-    assert.success().stdout(predicate::str::contains(" *hello.txt"));
+    assert.success().stdout(predicate::str::contains("  hello.txt"));
 }
 
 #[test]
@@ -188,7 +188,7 @@ fn test_cli_hash_shake128() {
         .arg("-")
         .assert();
 
-    assert.success().stdout(predicate::str::contains(" *hello.txt"));
+    assert.success().stdout(predicate::str::contains("  hello.txt"));
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn test_cli_hash_blake2b() {
         .arg("-")
         .assert();
 
-    assert.success().stdout(predicate::str::contains(" *hello.txt"));
+    assert.success().stdout(predicate::str::contains("  hello.txt"));
 }
 
 // ──────────────────────────────────────────────────────────
@@ -232,7 +232,7 @@ fn test_cli_hash_multi_algo() {
     assert
         .success()
         .stdout(predicate::str::contains("dffd6021bb2bd5b0af676290809ec3a5"))
-        .stdout(predicate::str::contains(" *hello.txt"));
+        .stdout(predicate::str::contains("  hello.txt"));
 }
 
 #[test]
@@ -342,7 +342,7 @@ fn test_cli_verify_missing_file_returns_io_exit_code() {
     let hash_file = dir.path().join("checksums.sha256");
     fs::write(
         &hash_file,
-        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 *missing.txt\n",
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  missing.txt\n",
     )
     .expect("寫入 hash 檔失敗");
 

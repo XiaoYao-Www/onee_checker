@@ -38,4 +38,16 @@ pub struct VerifyArgs {
     /// 安靜模式 — 僅顯示最終結果
     #[arg(short, long)]
     pub quiet: bool,
+
+    /// 忽略遺失的檔案
+    #[arg(long)]
+    pub ignore_missing: bool,
+
+    /// 嚴格模式：遇錯誤立即中止
+    #[arg(long)]
+    pub strict: bool,
+
+    /// 將驗證結果寫入 JSON 報告檔
+    #[arg(long, value_hint = clap::ValueHint::FilePath)]
+    pub report: Option<PathBuf>,
 }
