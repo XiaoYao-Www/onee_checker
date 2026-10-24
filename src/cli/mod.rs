@@ -3,11 +3,15 @@
 
 //! CLI 參數定義 — 使用 clap derive。
 
+mod check_cmd;
+mod diff_cmd;
 mod hash_cmd;
 mod json_cmd;
 mod txt_cmd;
 mod verify_cmd;
 
+pub use check_cmd::*;
+pub use diff_cmd::*;
 pub use hash_cmd::*;
 pub use json_cmd::*;
 pub use txt_cmd::*;
@@ -51,4 +55,10 @@ pub enum Commands {
 
     /// 生成文字樹狀目錄結構
     Txt(TxtArgs),
+
+    /// 驗證檔案 hash
+    Check(CheckArgs),
+
+    /// 比較兩份 manifest 差異
+    Diff(DiffArgs),
 }

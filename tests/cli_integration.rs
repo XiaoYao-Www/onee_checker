@@ -529,8 +529,38 @@ fn test_cli_quiet_mode() {
 }
 
 // ──────────────────────────────────────────────────────────
-//  JSON 與 Txt 子命令
+//  Check 與 Diff 子命令測試
 // ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_cli_check_success() {
+    let (_dir, file_path) = setup_test_file();
+    let assert = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("check")
+        .arg(&file_path)
+        .arg("--expect")
+        .arg("dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f")
+        .assert();
+    assert.success();
+}
+
+#[test]
+fn test_cli_diff_same() {
+    let dir = TempDir::new().unwrap();
+    let old = dir.path().join("old.sha256");
+    let new = dir.path().join("new.sha256");
+    fs::write(&old, "abc  file.txt").unwrap();
+    fs::write(&new, "abc  file.txt").unwrap();
+
+    let assert = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("diff")
+        .arg(&old)
+        .arg(&new)
+        .assert();
+    assert.success();
+}
 
 #[test]
 fn test_cli_json_output() {
@@ -568,4 +598,94 @@ fn test_cli_txt_output() {
         .success()
         .stdout(predicate::str::contains("a.txt"))
         .stdout(predicate::str::contains("b.txt"));
+}
+
+// ──────────────────────────────────────────────────────────
+//  check / diff 失敗路徑
+// ──────────────────────────────────────────────────────────
+
+/// check 不匹配時應回 1 並在 stdout 印出 FAIL。
+#[test]
+fn test_cli_check_mismatch_exit_1() {
+    let (_dir, file_path) = setup_test_file();
+
+    let assert = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("check")
+        .arg(&file_path)
+        .arg("--expect")
+        .arg("0".repeat(64))
+        .assert();
+
+    assert.code(predicate::eq(1)).stdout(predicate::str::contains("FAIL"));
+}
+
+/// check --text 應能對文字內容計算 hash 並通過。
+#[test]
+fn test_cli_check_text_ok() {
+    let assert = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("check")
+        .arg("--text")
+        .arg("hello")
+        .arg("--expect")
+        .arg("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
+        .assert();
+
+    assert.success();
+}
+
+/// check 指定不存在的路徑應回 3（輸入錯誤）。
+#[test]
+fn test_cli_check_missing_path_exit_3() {
+    let dir = TempDir::new().expect("應該能建立暫存目錄");
+    let missing = dir.path().join("not-exist.txt");
+
+    let assert = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("check")
+        .arg(&missing)
+        .arg("--expect")
+        .arg("0".repeat(64))
+        .assert();
+
+    assert.code(predicate::eq(3));
+}
+
+/// diff 有差異時應回 1 並印出 `+` 行。
+#[test]
+fn test_cli_diff_changed_exit_1() {
+    let dir = TempDir::new().expect("應該能建立暫存目錄");
+    let old = dir.path().join("old.sha256");
+    let new = dir.path().join("new.sha256");
+    fs::write(&old, "aa  a.txt\n").expect("應該能寫入舊清單");
+    fs::write(&new, "aa  a.txt\nbb  b.txt\n").expect("應該能寫入新清單");
+
+    let assert = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("diff")
+        .arg(&old)
+        .arg(&new)
+        .assert();
+
+    assert.code(predicate::eq(1)).stdout(predicate::str::contains("+ b.txt"));
+}
+
+/// diff 遇到無法解析的清單應回 3。
+#[test]
+fn test_cli_diff_parse_error_exit_3() {
+    let dir = TempDir::new().expect("應該能建立暫存目錄");
+    let old = dir.path().join("old.sha256");
+    let new = dir.path().join("new.sha256");
+    fs::write(&old, "not-a-valid-record\n").expect("應該能寫入舊清單");
+    fs::write(&new, "aa  a.txt\n").expect("應該能寫入新清單");
+
+    let assert = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("diff")
+        .arg(&old)
+        .arg(&new)
+        .assert();
+
+    assert.code(predicate::eq(3));
 }

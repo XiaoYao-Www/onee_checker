@@ -441,7 +441,7 @@ fn parse_json(content: &str) -> Result<Vec<HashEntry>> {
 // ──────────────────────────────────────────────────────────
 
 /// 變更的 Hash 記錄。
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct ChangedEntry {
     /// 檔案相對路徑
     pub path: String,
@@ -452,7 +452,7 @@ pub struct ChangedEntry {
 }
 
 /// 兩份 Manifest 差異比對報告。
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
 pub struct DiffReport {
     /// 新增的檔案路徑列表
     pub added: Vec<String>,

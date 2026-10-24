@@ -57,6 +57,8 @@ fn main() {
         Commands::Verify(args) => cmd_verify(args, cli.format),
         Commands::Json(args) => cmd_json(args).map(|()| 0),
         Commands::Txt(args) => cmd_txt(args).map(|()| 0),
+        Commands::Check(args) => cmd_check(args, cli.format),
+        Commands::Diff(args) => cmd_diff(args, cli.format),
     };
 
     match result {
@@ -509,6 +511,167 @@ fn cmd_json(args: cli::JsonArgs) -> Result<()> {
         }
     }
     Ok(())
+}
+
+// ──────────────────────────────────────────────────────────
+//  check 子命令
+// ──────────────────────────────────────────────────────────
+
+#[allow(clippy::too_many_lines, clippy::needless_pass_by_value)]
+fn cmd_check(args: cli::CheckArgs, format: onee_checker::report::OutputFormat) -> Result<i32> {
+    let length = match args.length {
+        Some(value) => Some(
+            u16::try_from(value)
+                .map_err(|_| OneeError::UnsupportedLength { algorithm: "check".into() })?,
+        ),
+        None => None,
+    };
+    let hash_type = match &args.algo {
+        Some(algo) => algo.to_hash_type(length)?,
+        None => HashType::SHA256,
+    };
+
+    let mut buffer = vec![0u8; 64 * 1024];
+    let (target, actual) = if let Some(text) = &args.text {
+        let mut hasher = hash_type.create_hasher();
+        let digest =
+            onee_checker::hash::compute_hash_reader(text.as_bytes(), &mut hasher, &mut buffer)
+                .map_err(OneeError::Io)?;
+        (format!("(text:{text})"), hex::encode(&digest))
+    } else {
+        let path = args
+            .path
+            .as_deref()
+            .ok_or_else(|| OneeError::ArgumentError("必須提供檔案路徑或 --text".into()))?;
+        if !path.is_file() {
+            return Err(OneeError::InvalidPath(format!(
+                "路徑不存在或不是檔案: {}",
+                path.display()
+            )));
+        }
+        let digest = onee_checker::hash::compute_file_hash(path, &hash_type, &mut buffer)
+            .map_err(OneeError::Io)?;
+        (path.display().to_string(), hex::encode(&digest))
+    };
+
+    let matched = args.expect.iter().any(|expected| {
+        let expected = expected.trim();
+        if args.ignore_case {
+            expected.eq_ignore_ascii_case(&actual)
+        } else {
+            expected == actual
+        }
+    });
+
+    let mut entry = EntryReport::new(
+        target.clone(),
+        if matched { EntryStatus::Match } else { EntryStatus::Mismatch },
+    );
+    entry.expected = Some(args.expect.join(" "));
+    entry.actual = Some(actual.clone());
+
+    match format {
+        onee_checker::report::OutputFormat::Json | onee_checker::report::OutputFormat::Ndjson => {
+            println!("{}", serde_json::to_string(&entry).map_err(OneeError::Serde)?);
+        }
+        onee_checker::report::OutputFormat::Csv => {
+            let mut out = stdout().lock();
+            writeln!(out, "path,status,expected,actual").map_err(OneeError::Io)?;
+            writeln!(
+                out,
+                "{},{},{},{}",
+                onee_checker::report::csv_escape(&target),
+                entry.status.as_str(),
+                onee_checker::report::csv_escape(&args.expect.join(" ")),
+                actual
+            )
+            .map_err(OneeError::Io)?;
+            out.flush().map_err(OneeError::Io)?;
+        }
+        _ => {
+            if matched {
+                println!("OK {target} {} {actual}", hash_type.display_name());
+            } else {
+                println!(
+                    "FAIL {target} {} expected={} actual={actual}",
+                    hash_type.display_name(),
+                    args.expect.join(",")
+                );
+            }
+            eprintln!(
+                "{} 檢查完成: {}（{}）",
+                if matched { style("✔").green() } else { style("✘").red() },
+                if matched { "匹配" } else { "不匹配" },
+                hash_type.display_name()
+            );
+        }
+    }
+
+    Ok(i32::from(!matched))
+}
+
+// ──────────────────────────────────────────────────────────
+//  diff 子命令
+// ──────────────────────────────────────────────────────────
+
+#[allow(clippy::needless_pass_by_value)]
+fn cmd_diff(args: cli::DiffArgs, format: onee_checker::report::OutputFormat) -> Result<i32> {
+    use std::fs;
+    let old_content = fs::read_to_string(&args.old).map_err(OneeError::Io)?;
+    let new_content = fs::read_to_string(&args.new).map_err(OneeError::Io)?;
+    let (_, old_entries) = onee_checker::manifest::parse_auto(&old_content)?;
+    let (_, new_entries) = onee_checker::manifest::parse_auto(&new_content)?;
+
+    let report = onee_checker::manifest::diff(&old_entries, &new_entries);
+
+    match format {
+        onee_checker::report::OutputFormat::Json => {
+            println!("{}", serde_json::to_string(&report).map_err(OneeError::Serde)?);
+        }
+        onee_checker::report::OutputFormat::Csv => {
+            let mut out = stdout().lock();
+            writeln!(out, "kind,path,old_hash,new_hash").map_err(OneeError::Io)?;
+            for path in &report.added {
+                writeln!(out, "added,{},,", onee_checker::report::csv_escape(path))
+                    .map_err(OneeError::Io)?;
+            }
+            for path in &report.removed {
+                writeln!(out, "removed,{},,", onee_checker::report::csv_escape(path))
+                    .map_err(OneeError::Io)?;
+            }
+            for change in &report.changed {
+                writeln!(
+                    out,
+                    "changed,{},{},{}",
+                    onee_checker::report::csv_escape(&change.path),
+                    change.old_hash,
+                    change.new_hash
+                )
+                .map_err(OneeError::Io)?;
+            }
+            out.flush().map_err(OneeError::Io)?;
+        }
+        _ => {
+            for path in &report.added {
+                println!("+ {path}");
+            }
+            for path in &report.removed {
+                println!("- {path}");
+            }
+            for change in &report.changed {
+                println!("~ {} {} -> {}", change.path, change.old_hash, change.new_hash);
+            }
+            eprintln!(
+                "差異: {} 新增, {} 移除, {} 變更, {} 未變",
+                report.added.len(),
+                report.removed.len(),
+                report.changed.len(),
+                report.unchanged
+            );
+        }
+    }
+
+    Ok(i32::from(!report.is_empty()))
 }
 
 // ──────────────────────────────────────────────────────────
