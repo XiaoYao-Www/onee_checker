@@ -711,3 +711,117 @@ fn test_cli_verify_manifest_in_cwd() {
 
     assert.success();
 }
+
+// ──────────────────────────────────────────────────────────
+//  文字模式 / 二進位模式
+// ──────────────────────────────────────────────────────────
+
+/// 預設（文字模式）輸出為 `<hex>  <path>`；`-b` 改為 `<hex> *<path>`。
+#[test]
+fn test_cli_hash_mode_switch() {
+    let (_dir, file_path) = setup_test_file();
+
+    let text = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("hash")
+        .arg(&file_path)
+        .arg("-a")
+        .arg("sha256")
+        .arg("-o")
+        .arg("-")
+        .arg("-q")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let text = String::from_utf8(text).expect("輸出不應是亂碼");
+    assert!(text.contains("  hello.txt"), "文字模式應為兩個空白：{text}");
+    assert!(!text.contains(" *hello.txt"), "文字模式不應出現星號：{text}");
+
+    let binary = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("hash")
+        .arg(&file_path)
+        .arg("-a")
+        .arg("sha256")
+        .arg("-b")
+        .arg("-o")
+        .arg("-")
+        .arg("-q")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let binary = String::from_utf8(binary).expect("輸出不應是亂碼");
+    assert!(binary.contains(" *hello.txt"), "二進位模式應為 ` *`：{binary}");
+}
+
+/// `--binary` 與 `--text` 互斥。
+#[test]
+fn test_cli_hash_mode_conflict() {
+    let (_dir, file_path) = setup_test_file();
+
+    Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .arg("hash")
+        .arg(&file_path)
+        .arg("-b")
+        .arg("--text")
+        .arg("-q")
+        .assert()
+        .code(predicate::eq(3));
+}
+
+/// verify 應同時接受文字與二進位模式的清單。
+#[test]
+fn test_cli_verify_accepts_binary_manifest() {
+    let dir = TempDir::new().expect("應該能建立暫存目錄");
+    fs::write(dir.path().join("a.txt"), b"hello").expect("應該能寫入檔案");
+    fs::write(
+        dir.path().join("data.sha256"),
+        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824 *a.txt\n",
+    )
+    .expect("應該能寫入二進位模式清單");
+
+    let assert = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .current_dir(dir.path())
+        .arg("verify")
+        .arg("data.sha256")
+        .arg("-q")
+        .assert();
+
+    assert.success();
+}
+
+/// `verify --format shasum` 會把實際 hash 重新輸出，並套用選擇的模式。
+#[test]
+fn test_cli_verify_format_shasum_mode() {
+    let dir = TempDir::new().expect("應該能建立暫存目錄");
+    fs::write(dir.path().join("a.txt"), b"hello").expect("應該能寫入檔案");
+    fs::write(
+        dir.path().join("data.sha256"),
+        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824  a.txt\n",
+    )
+    .expect("應該能寫入清單");
+
+    let binary = Command::cargo_bin("oneechk")
+        .expect("cargo_bin 失敗")
+        .current_dir(dir.path())
+        .arg("verify")
+        .arg("data.sha256")
+        .arg("-q")
+        .arg("--format")
+        .arg("shasum")
+        .arg("-b")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let binary = String::from_utf8(binary).expect("輸出不應是亂碼");
+    assert!(binary.contains("2cf24dba"), "應輸出 hash：{binary}");
+    assert!(binary.contains(" *a.txt"), "二進位模式應為 ` *`：{binary}");
+}

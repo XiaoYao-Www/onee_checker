@@ -3,6 +3,30 @@
 本專案遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。
 版本號格式：`MAJOR.MINOR.PATCH`；CLI 的退出碼與輸出格式屬於公開契約。
 
+## [未發佈]
+
+### 新增
+
+- `hash -b`／`--binary` 與 `hash --text`：切換清單的文字／二進位模式。
+  文字模式為 `<hex>  <path>`（兩個空白），二進位模式為 `<hex> *<path>`，
+  與 GNU `sha256sum`／`sha256sum -b` 一致。
+- `verify -b`／`--binary`、`verify --text`：`verify --format shasum`／`bsd`
+  重新輸出清單時可指定模式（先前 `verify --format shasum` 不輸出任何內容）。
+- `HashMode` 型別（`onee_checker::algorithm`），`save_hash_file`、
+  `report::write_hash_line`、`write_entry`、`write_verify_report` 皆新增 `mode` 參數。
+
+### 變更
+
+- `hash` 寫入檔案時的預設模式由二進位（` *`）改為文字（`  `），
+  與 stdout 及 GNU `sha256sum` 一致；需要舊行為請加 `-b`。
+- `hash --format json`／`ndjson` 每行多一個 `mode` 欄位（`text`／`binary`）。
+- `--binary` 與 `--text` 互斥，同時指定會以 exit 3 結束。
+
+### 測試
+
+- 新增單元測試（模式分隔符、JSON `mode` 欄位、`verify --format shasum` 模式）
+  與整合測試（`-b` 輸出、互斥參數、二進位清單可驗證、重新輸出模式）。
+
 ## [2.1.0] - 2026-10-24
 
 ### 新增

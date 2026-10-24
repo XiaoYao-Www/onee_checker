@@ -16,7 +16,7 @@ use std::path::Path;
 use chrono::Local;
 
 use super::node::FileNodeContainer;
-use crate::algorithm::HashData;
+use crate::algorithm::{HashData, HashMode};
 use crate::error::{OneeError, Result};
 
 /// 最大 hash 檔解析行數（DoS 防護）
@@ -117,7 +117,12 @@ impl HashEntry {
 /// ```
 ///
 /// `*` 表示二進位模式。
-pub fn save_hash_file(data: &[HashData], output_path: &Path, root_path: &Path) -> io::Result<()> {
+pub fn save_hash_file(
+    data: &[HashData],
+    output_path: &Path,
+    root_path: &Path,
+    mode: HashMode,
+) -> io::Result<()> {
     let mut writer = BufWriter::new(File::create(output_path)?);
 
     writeln!(writer, "# ******************************")?;
@@ -131,7 +136,7 @@ pub fn save_hash_file(data: &[HashData], output_path: &Path, root_path: &Path) -
         let path_str = rel_path.to_string_lossy().replace('\\', "/");
         hex_buf.clear();
         entry.hash_hex_into(&mut hex_buf);
-        writeln!(writer, "{hex_buf} *{path_str}")?;
+        writeln!(writer, "{hex_buf}{}{path_str}", mode.separator())?;
     }
 
     writer.flush()?;

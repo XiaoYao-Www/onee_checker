@@ -74,6 +74,23 @@ f44e64e75f3948e9f73f8dfa94721c4ce8cbb4f265c4790c702b2d41cfbf2753  dist/b.txt
 oneechk hash ./dist -o - | head -n 1
 ```
 
+### 文字模式與二進位模式
+
+GNU `sha256sum` 用分隔符區分模式，`oneechk` 也支援：
+
+```bash
+oneechk hash ./dist/a.txt -a sha256 -o - -q       # 預設：文字模式
+# 8ed3f6ad...  a.txt
+
+oneechk hash ./dist/a.txt -a sha256 -o - -q -b    # 二進位模式
+# 8ed3f6ad... *a.txt
+```
+
+- `-b`／`--binary`：二進位模式（`<hex> *<path>`），對應 `sha256sum -b`。
+- `--text`：明確指定文字模式（預設）；與 `-b` 同時使用會回 exit 3。
+- 兩種清單 `verify` 都吃；`--format json` 會多一個 `mode` 欄位可判斷來源。
+- 預設模式是**文字模式**，與 GNU coreutils 一致。
+
 ## 第 2 章：驗證與讀懂退出碼
 
 ```bash

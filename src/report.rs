@@ -9,6 +9,8 @@
 use serde::Serialize;
 use std::io::{self, Write};
 
+use crate::algorithm::HashMode;
+
 /// 輸出格式列舉。
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[clap(rename_all = "lower")]
@@ -165,17 +167,21 @@ pub fn csv_escape(field: &str) -> String {
 }
 
 /// 將單筆雜湊結果寫入輸出串流。
+///
+/// `mode` 只影響 shasum 系列格式（文字模式兩個空白、二進位模式 ` *`）；
+/// JSON/NDJSON 會額外帶出 `mode` 欄位，CSV 與 BSD 格式不受影響。
 pub fn write_hash_line<W: Write>(
     w: &mut W,
     format: OutputFormat,
     algorithm: &str,
     hash_hex: &str,
     rel_path: &str,
+    mode: HashMode,
 ) -> io::Result<()> {
     let normalized_path = rel_path.replace('\\', "/");
     match format {
         OutputFormat::Shasum | OutputFormat::Human => {
-            writeln!(w, "{hash_hex}  {normalized_path}")
+            writeln!(w, "{hash_hex}{}{normalized_path}", mode.separator())
         }
         OutputFormat::Bsd => {
             let algo_lower = algorithm.to_lowercase();
@@ -190,6 +196,7 @@ pub fn write_hash_line<W: Write>(
             let json_obj = serde_json::json!({
                 "algorithm": algo_lower,
                 "hash": hash_hex,
+                "mode": mode.as_str(),
                 "path": normalized_path,
             });
             writeln!(w, "{json_obj}")
@@ -202,6 +209,7 @@ pub fn write_entry<W: Write>(
     w: &mut W,
     format: OutputFormat,
     entry: &EntryReport,
+    mode: HashMode,
 ) -> io::Result<()> {
     let normalized_path = entry.path.replace('\\', "/");
     match format {
@@ -222,7 +230,7 @@ pub fn write_entry<W: Write>(
         }
         OutputFormat::Shasum | OutputFormat::Bsd => {
             if let Some(actual) = &entry.actual {
-                write_hash_line(w, format, "", actual, &normalized_path)
+                write_hash_line(w, format, "", actual, &normalized_path, mode)
             } else {
                 Ok(())
             }
@@ -231,10 +239,14 @@ pub fn write_entry<W: Write>(
 }
 
 /// 將完整驗證報告寫入輸出串流。
+///
+/// `Shasum`／`Bsd` 會把每筆「實際 hash」重新輸出成清單（可用於正規化既有清單）；
+/// `mode` 決定 shasum 的分隔符。
 pub fn write_verify_report<W: Write>(
     w: &mut W,
     format: OutputFormat,
     report: &VerifyReport,
+    mode: HashMode,
 ) -> io::Result<()> {
     match format {
         OutputFormat::Json => {
@@ -267,7 +279,15 @@ pub fn write_verify_report<W: Write>(
             }
             Ok(())
         }
-        OutputFormat::Human | OutputFormat::Shasum | OutputFormat::Bsd => Ok(()),
+        OutputFormat::Human => Ok(()),
+        OutputFormat::Shasum | OutputFormat::Bsd => {
+            for entry in &report.entries {
+                if let Some(actual) = &entry.actual {
+                    write_hash_line(w, format, &report.algorithm, actual, &entry.path, mode)?;
+                }
+            }
+            Ok(())
+        }
     }
 }
 
@@ -319,16 +339,87 @@ mod tests {
     #[test]
     fn test_write_hash_line_shasum_bsd() {
         let mut buf = Vec::new();
-        write_hash_line(&mut buf, OutputFormat::Shasum, "SHA256", "abc12345", "foo\\bar.txt")
-            .unwrap();
+        write_hash_line(
+            &mut buf,
+            OutputFormat::Shasum,
+            "SHA256",
+            "abc12345",
+            "foo\\bar.txt",
+            HashMode::Text,
+        )
+        .unwrap();
         let s = String::from_utf8(buf).unwrap();
         assert_eq!(s, "abc12345  foo/bar.txt\n");
 
         let mut buf2 = Vec::new();
-        write_hash_line(&mut buf2, OutputFormat::Bsd, "SHA256", "abc12345", "foo\\bar.txt")
-            .unwrap();
+        write_hash_line(
+            &mut buf2,
+            OutputFormat::Bsd,
+            "SHA256",
+            "abc12345",
+            "foo\\bar.txt",
+            HashMode::Text,
+        )
+        .unwrap();
         let s2 = String::from_utf8(buf2).unwrap();
         assert_eq!(s2, "sha256 (foo/bar.txt) = abc12345\n");
+    }
+
+    /// 二進位模式的分隔符是 ` *`，文字模式是兩個空白。
+    #[test]
+    fn test_hash_mode_separator() {
+        assert_eq!(HashMode::Text.separator(), "  ");
+        assert_eq!(HashMode::Binary.separator(), " *");
+        assert_eq!(HashMode::default(), HashMode::Text);
+        assert_eq!(HashMode::Binary.as_str(), "binary");
+
+        let mut buf = Vec::new();
+        write_hash_line(
+            &mut buf,
+            OutputFormat::Shasum,
+            "SHA256",
+            "dead",
+            "a.txt",
+            HashMode::Binary,
+        )
+        .unwrap();
+        assert_eq!(String::from_utf8(buf).unwrap(), "dead *a.txt\n");
+
+        let mut json = Vec::new();
+        write_hash_line(&mut json, OutputFormat::Json, "sha256", "dead", "a.txt", HashMode::Binary)
+            .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(std::str::from_utf8(&json).unwrap().trim()).unwrap();
+        assert_eq!(value["mode"], "binary");
+    }
+
+    /// `verify --format shasum` 應把實際 hash 重新輸出成清單，並套用模式字元。
+    #[test]
+    fn test_write_verify_report_shasum() {
+        let report = VerifyReport {
+            version: "2.2.0".to_string(),
+            command: "verify".to_string(),
+            hashfile: "sums.txt".to_string(),
+            algorithm: "SHA-256".to_string(),
+            root: ".".to_string(),
+            summary: VerifySummary { total: 1, matched: 1, mismatched: 0, errors: 0, missing: 0 },
+            exit_code: 0,
+            entries: vec![EntryReport {
+                path: "dir/a.txt".to_string(),
+                status: EntryStatus::Match,
+                expected: Some("abc".to_string()),
+                actual: Some("abc".to_string()),
+                error: None,
+            }],
+        };
+
+        let mut buf = Vec::new();
+        write_verify_report(&mut buf, OutputFormat::Shasum, &report, HashMode::Binary).unwrap();
+        assert_eq!(String::from_utf8(buf).unwrap(), "abc *dir/a.txt\n");
+
+        let mut buf2 = Vec::new();
+        write_verify_report(&mut buf2, OutputFormat::Shasum, &report, HashMode::Text).unwrap();
+        assert_eq!(String::from_utf8(buf2).unwrap(), "abc  dir/a.txt\n");
     }
 
     #[test]
@@ -359,7 +450,7 @@ mod tests {
         };
 
         let mut buf = Vec::new();
-        write_verify_report(&mut buf, OutputFormat::Ndjson, &report).unwrap();
+        write_verify_report(&mut buf, OutputFormat::Ndjson, &report, HashMode::Text).unwrap();
         let lines: Vec<&str> = std::str::from_utf8(&buf).unwrap().lines().collect();
         assert_eq!(lines.len(), 2);
 

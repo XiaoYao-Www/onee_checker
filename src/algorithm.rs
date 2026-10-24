@@ -343,6 +343,40 @@ impl std::str::FromStr for BufferSize {
     }
 }
 
+/// 校驗檔的模式（GNU/BSD `.sha256` 格式的 hash 與路徑分隔符）。
+///
+/// GNU coreutils 以分隔符區分模式：
+/// - 文字模式：`<hash>  <path>`（兩個空白，`sha256sum` 預設）
+/// - 二進位模式：`<hash> *<path>`（星號，對應 GNU 的 `sha256sum -b`）
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum HashMode {
+    /// 文字模式：`<hex>  <path>`（兩個空白）
+    #[default]
+    Text,
+    /// 二進位模式：`<hex> *<path>`
+    Binary,
+}
+
+impl HashMode {
+    /// 回傳 hash 與路徑之間的分隔符（含前導空白）。
+    #[must_use]
+    pub const fn separator(self) -> &'static str {
+        match self {
+            Self::Text => "  ",
+            Self::Binary => " *",
+        }
+    }
+
+    /// 回傳模式名稱，用於 JSON 輸出與訊息。
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Binary => "binary",
+        }
+    }
+}
+
 impl std::fmt::Display for BufferSize {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let bytes = self.0;

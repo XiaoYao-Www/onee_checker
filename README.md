@@ -168,11 +168,15 @@ oneechk hash ./big.iso -a sha256 -a blake3 -a sha512 --digest-only
 | 格式 | 適用 | 樣貌 |
 | :--- | :--- | :--- |
 | `human` | 終端閱讀 | 上色訊息、統計摘要 |
-| `shasum` | 相容 `sha256sum -c` | `<hex>  <path>` |
+| `shasum` | 相容 `sha256sum -c` | `<hex>  <path>`（`-b` 則為 `<hex> *<path>`） |
 | `bsd` | BSD 工具鏈 | `<algo> (<path>) = <hex>` |
 | `json` | 程式解析 | 完整報告物件／每行一個物件 |
 | `csv` | 試算表 | 表頭 + 逗號分隔 |
 | `ndjson` | 串流處理 | 每行一筆，尾端含摘要 |
+
+清單的「模式」可切換：預設文字模式（`<hex>  <path>`，兩個空白），
+`-b`／`--binary` 改為二進位模式（`<hex> *<path>`，對應 GNU `sha256sum -b`）；
+`verify` 兩種都能讀，`verify --format shasum` 也能指定要用哪種模式重新輸出。
 
 | 退出碼 | 意義 |
 | :---: | :--- |

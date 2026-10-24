@@ -83,6 +83,20 @@ pub struct HashData {
 | `hash_hex()` | 回傳 hex 字串 (分配新 String) |
 | `hash_hex_into(&mut String)` | 將 hex 寫入外部緩衝區 (零 alloc) |
 
+### `HashMode`（2.1.0 之後新增）
+
+```rust
+pub enum HashMode { Text, Binary }   // Default = Text
+
+impl HashMode {
+    pub const fn separator(self) -> &'static str;  // "  " / " *"
+    pub const fn as_str(self) -> &'static str;     // "text" / "binary"
+}
+```
+
+決定 shasum 格式中 hash 與路徑之間的分隔符（GNU `sha256sum` 的 text／binary 模式）。
+只影響 shasum 系列輸出；`bsd` 沒有模式欄位，`csv` 不變，`json`／`ndjson` 會多一個 `mode` 欄位。
+
 ### `BufferSize`
 
 ```rust
@@ -283,11 +297,15 @@ pub fn validate_path(path: &Path) -> Result<(), String>
 ### Hash 檔讀寫
 
 ```rust
-pub fn save_hash_file(data: &[HashData], output: &Path, root: &Path) -> io::Result<()>
+pub fn save_hash_file(data: &[HashData], output: &Path, root: &Path,
+                      mode: HashMode) -> io::Result<()>
 pub fn save_file_node_json(container: &FileNodeContainer, output: &Path) -> io::Result<()>
 pub fn parse_hash_file(content: &str) -> Vec<HashEntry>
 pub fn parse_hash_file_strict(content: &str) -> Result<Vec<HashEntry>>
 ```
+
+`mode` 決定寫出的模式字元：`HashMode::Text` → `<hex>  <path>`、`HashMode::Binary` → `<hex> *<path>`。
+解析器兩種都接受（`*` 或兩個空白）。
 
 `parse_hash_file` 為相容用途保留寬鬆解析行為；嚴格版本遇到無效記錄、超過行數上限或空清單時回傳 `HashFileParseError`。CLI 與驗證 API 採嚴格解析。
 
@@ -459,13 +477,13 @@ impl VerifyReport {
 pub fn csv_escape(field: &str) -> String;
 
 pub fn write_hash_line<W: Write>(w: &mut W, format: OutputFormat,
-    algorithm: &str, hash_hex: &str, rel_path: &str) -> io::Result<()>;
+    algorithm: &str, hash_hex: &str, rel_path: &str, mode: HashMode) -> io::Result<()>;
 
 pub fn write_entry<W: Write>(w: &mut W, format: OutputFormat,
-    entry: &EntryReport) -> io::Result<()>;
+    entry: &EntryReport, mode: HashMode) -> io::Result<()>;
 
 pub fn write_verify_report<W: Write>(w: &mut W, format: OutputFormat,
-    report: &VerifyReport) -> io::Result<()>;
+    report: &VerifyReport, mode: HashMode) -> io::Result<()>;
 ```
 
 `Human` 格式在 `write_*` 中不輸出資料（人類訊息由呼叫端寫到 stderr），
@@ -492,7 +510,12 @@ let report = VerifyReport {
 };
 
 let mut out = std::io::stdout();
-onee_checker::report::write_verify_report(&mut out, onee_checker::report::OutputFormat::Json, &report)?;
+onee_checker::report::write_verify_report(
+    &mut out,
+    onee_checker::report::OutputFormat::Json,
+    &report,
+    onee_checker::algorithm::HashMode::Text,
+)?;
 # Ok::<(), std::io::Error>(())
 ```
 
@@ -583,7 +606,7 @@ fn integrity_check(data_dir: &Path) -> Result<()> {
         .collect();
 
     let output = data_dir.join("checksums.sha256");
-    save_hash_file(&hash_data, &output, data_dir)?;
+    save_hash_file(&hash_data, &output, data_dir, HashMode::Text)?;
 
     // 3. 產生目錄快照 JSON
     let node = build_file_node(data_dir)?;

@@ -72,7 +72,12 @@ oneechk hash <PATH> [OPTIONS]
 | `-t`, `--threads <N>` | CPU 數 | 檔案級並行數 |
 | `--digest-only` | 關閉 | stdout 只印雜湊值（多演算法時每行 `<演算法>: <hex>`） |
 | `--strict` | 關閉 | 遇錯誤立即中止（預設繼續並彙總） |
+| `-b`, `--binary` | 關閉 | 二進位模式：`<hex> *<path>`（對應 GNU `sha256sum -b`） |
+| `--text` | 預設 | 文字模式：`<hex>  <path>`（兩個空白）；與 `--binary` 互斥 |
 | `-q`, `--quiet` | 關閉 | 不顯示進度與訊息 |
+
+> `--binary`／`--text` 同時影響 stdout 與寫入檔案的清單。
+> 預設是**文字模式**（與 GNU `sha256sum` 一致）；`verify` 兩種模式都能讀。
 
 **範例**
 
@@ -105,6 +110,8 @@ oneechk verify <HASHFILE> [OPTIONS]
 | `--buffer <SIZE>` | `1M` | 讀取緩衝區 |
 | `-t`, `--threads <N>` | CPU 數 | 檔案級並行數 |
 | `--strict` | 關閉 | 遇錯誤立即中止 |
+| `-b`, `--binary` | 關閉 | 以二進位模式重新輸出清單（配合 `--format shasum`／`bsd`） |
+| `--text` | 預設 | 以文字模式重新輸出清單；與 `--binary` 互斥 |
 | `-q`, `--quiet` | 關閉 | 只輸出最終統計 |
 
 **語意**：`verify` 會先嚴格解析清單；清單格式錯誤或沒有任何有效項目時直接回 `3`，
@@ -245,12 +252,36 @@ data (9 B)
 
 ### `hash` 的 `shasum`／`human`
 
+預設是**文字模式**（兩個空白）：
+
 ```text
 8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8  data/a.txt
 f44e64e75f3948e9f73f8dfa94721c4ce8cbb4f265c4790c702b2d41cfbf2753  data/b.txt
 ```
 
-兩個空白分隔、路徑以 `/` 分隔（跨平台一致）、可直接餵給 `sha256sum -c`。
+加上 `-b`／`--binary` 則為**二進位模式**（星號）：
+
+```text
+8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8 *data/a.txt
+f44e64e75f3948e9f73f8dfa94721c4ce8cbb4f265c4790c702b2d41cfbf2753 *data/b.txt
+```
+
+- 路徑一律以 `/` 分隔（跨平台一致）。
+- 兩種模式都能直接被 `sha256sum -c` 驗證；`oneechk verify` 也兩種都接受。
+- 模式只影響 shasum 系列；`bsd` 格式沒有模式欄位，`csv` 也不變。
+
+### `verify` 的 `shasum`／`bsd`（重新輸出清單）
+
+`verify --format shasum` 會把每筆「實際 hash」重新輸出成清單，可用來正規化既有清單：
+
+```bash
+oneechk verify data.sha256 -q --format shasum -b
+```
+
+```text
+8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8 *data/a.txt
+f44e64e75f3948e9f73f8dfa94721c4ce8cbb4f265c4790c702b2d41cfbf2753 *data/b.txt
+```
 
 ### `hash` 的 `bsd`
 
@@ -266,10 +297,10 @@ sha-256 (data/a.txt) = 8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8
 
 ### `hash` 的 `json` / `ndjson`
 
-每行一個物件（NDJSON 風格，適合串流處理）：
+每行一個物件（NDJSON 風格，適合串流處理）；`mode` 會反映目前模式：
 
 ```json
-{"algorithm":"sha-256","hash":"8ed3f6ad...","path":"data/a.txt"}
+{"algorithm":"sha-256","hash":"8ed3f6ad...","mode":"text","path":"data/a.txt"}
 ```
 
 ### `verify` 的 `json`（完整報告）
@@ -370,7 +401,8 @@ if ($LASTEXITCODE -ne 0) { throw "驗證失敗（exit=$LASTEXITCODE）" }
 ## 與 GNU coreutils 的相容性
 
 - `hash` 的 `shasum` 輸出 `<hex>  <path>` 與 `sha256sum` 相同，可用來產生可被 `sha256sum -c` 驗證的清單。
-- `verify` 接受 `sha256sum` 產生的清單；`*`（binary mode）前綴會被正確處理。
+- `hash -b` 對應 GNU `sha256sum -b`（`<hex> *<path>`）；兩者產生的清單可互換。
+- `verify` 接受 `sha256sum` 產生的清單，`*`（二進位模式）與兩個空白（文字模式）前綴都會被正確處理。
 - 差異：`oneechk` 支援多演算法與可變長度、輸出多種格式、退出碼分成四類；
   `sha256sum -c` 只有成功/失敗二值。
 

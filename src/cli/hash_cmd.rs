@@ -7,13 +7,14 @@ use std::path::PathBuf;
 
 use clap::Args;
 
-use crate::algorithm::{BufferSize, HashAlgo};
+use crate::algorithm::{BufferSize, HashAlgo, HashMode};
 
 /// 生成 hash 驗證檔
 ///
 /// 計算指定路徑下所有檔案的 hash 值，輸出相容於 shasum 格式的驗證檔。
 /// 支援 MD5、SHA-1/2/3、SHAKE、BLAKE2/3 等 14 種演算法。
 #[derive(Args, Clone, Debug)]
+#[allow(clippy::struct_excessive_bools)] // CLI 旗標本質上就是一組開關
 pub struct HashArgs {
     /// 要計算的路徑（檔案或目錄）
     #[arg(value_hint = clap::ValueHint::AnyPath)]
@@ -53,4 +54,24 @@ pub struct HashArgs {
     /// 嚴格模式：遇錯誤立即中止
     #[arg(long)]
     pub strict: bool,
+
+    /// 以二進位模式輸出（`<hex> *<path>`，對應 GNU `sha256sum -b`）
+    #[arg(short = 'b', long, conflicts_with = "text")]
+    pub binary: bool,
+
+    /// 以文字模式輸出（`<hex>  <path>`，預設，對應 GNU `sha256sum`）
+    #[arg(long)]
+    pub text: bool,
+}
+
+impl HashArgs {
+    /// 依 `--binary`／`--text` 決定清單要使用的模式字元。
+    #[must_use]
+    pub const fn mode(&self) -> HashMode {
+        if self.binary {
+            HashMode::Binary
+        } else {
+            HashMode::Text
+        }
+    }
 }

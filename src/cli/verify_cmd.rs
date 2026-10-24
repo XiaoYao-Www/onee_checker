@@ -7,13 +7,14 @@ use std::path::PathBuf;
 
 use clap::Args;
 
-use crate::algorithm::{BufferSize, HashAlgo};
+use crate::algorithm::{BufferSize, HashAlgo, HashMode};
 
 /// 驗證 hash 驗證檔
 ///
 /// 解析 hash 驗證檔，逐一比對檔案 hash 是否匹配。
 /// 演算法預設從副檔名推斷；亦可手動指定。
 #[derive(Args, Clone, Debug)]
+#[allow(clippy::struct_excessive_bools)] // CLI 旗標本質上就是一組開關
 pub struct VerifyArgs {
     /// hash 驗證檔路徑（如 `dir.sha256`）
     #[arg(value_hint = clap::ValueHint::FilePath)]
@@ -50,4 +51,24 @@ pub struct VerifyArgs {
     /// 將驗證結果寫入 JSON 報告檔
     #[arg(long, value_hint = clap::ValueHint::FilePath)]
     pub report: Option<PathBuf>,
+
+    /// 以二進位模式輸出清單（`<hex> *<path>`）
+    #[arg(short = 'b', long, conflicts_with = "text")]
+    pub binary: bool,
+
+    /// 以文字模式輸出清單（`<hex>  <path>`，預設）
+    #[arg(long)]
+    pub text: bool,
+}
+
+impl VerifyArgs {
+    /// 依 `--binary`／`--text` 決定 `--format shasum`／`bsd` 的模式字元。
+    #[must_use]
+    pub const fn mode(&self) -> HashMode {
+        if self.binary {
+            HashMode::Binary
+        } else {
+            HashMode::Text
+        }
+    }
 }

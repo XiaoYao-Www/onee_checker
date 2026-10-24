@@ -16,7 +16,7 @@ use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 
-use onee_checker::algorithm::{HashAlgo, HashData, HashType};
+use onee_checker::algorithm::{HashAlgo, HashData, HashMode, HashType};
 use onee_checker::cli::{self, Cli, Commands, SizeType};
 use onee_checker::error::OneeError;
 use onee_checker::error::Result;
@@ -179,9 +179,12 @@ fn cmd_hash(args: cli::HashArgs, format: onee_checker::report::OutputFormat) -> 
                     hash_type,
                     path,
                     args.output.as_ref(),
-                    format,
-                    args.digest_only,
-                    true,
+                    &OutputOptions {
+                        format,
+                        digest_only: args.digest_only,
+                        multi_algo: true,
+                        mode: args.mode(),
+                    },
                 )?;
             }
         }
@@ -249,11 +252,22 @@ fn cmd_hash(args: cli::HashArgs, format: onee_checker::report::OutputFormat) -> 
         hash_type,
         path,
         args.output.as_ref(),
-        format,
-        args.digest_only,
-        false,
+        &OutputOptions {
+            format,
+            digest_only: args.digest_only,
+            multi_algo: false,
+            mode: args.mode(),
+        },
     )?;
     Ok(())
+}
+
+/// `hash` 子命令的輸出選項（避免 `save_hash_results` 參數過多）。
+struct OutputOptions {
+    format: onee_checker::report::OutputFormat,
+    digest_only: bool,
+    multi_algo: bool,
+    mode: HashMode,
 }
 
 fn save_hash_results(
@@ -261,9 +275,7 @@ fn save_hash_results(
     hash_type: &HashType,
     path: &Path,
     output: Option<&PathBuf>,
-    format: onee_checker::report::OutputFormat,
-    digest_only: bool,
-    multi_algo: bool,
+    options: &OutputOptions,
 ) -> Result<()> {
     let root = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
@@ -271,10 +283,10 @@ fn save_hash_results(
     };
 
     // `--digest-only`：只輸出 hex 值（多演算法時加上演算法前綴）
-    if digest_only {
+    if options.digest_only {
         let mut stdout = BufWriter::new(stdout().lock());
         for entry in hash_data {
-            if multi_algo {
+            if options.multi_algo {
                 writeln!(stdout, "{}: {}", hash_type.display_name(), entry.hash_hex())
                     .map_err(OneeError::Io)?;
             } else {
@@ -293,17 +305,18 @@ fn save_hash_results(
                 let path_str = rel_path.to_string_lossy().replace('\\', "/");
                 onee_checker::report::write_hash_line(
                     &mut stdout,
-                    format,
+                    options.format,
                     hash_type.display_name(),
                     &entry.hash_hex(),
                     &path_str,
+                    options.mode,
                 )
                 .map_err(OneeError::Io)?;
             }
             stdout.flush().map_err(OneeError::Io)?;
         }
         Some(out) => {
-            save_hash_file(hash_data, out.as_path(), root)?;
+            save_hash_file(hash_data, out.as_path(), root, options.mode)?;
             eprintln!("{} 已儲存: {}", style("✔").green(), out.display());
         }
         None => {
@@ -312,7 +325,7 @@ fn save_hash_results(
                 path.file_name().unwrap_or_default().to_string_lossy(),
                 hash_type.suffix()
             ));
-            save_hash_file(hash_data, &output_path, root)?;
+            save_hash_file(hash_data, &output_path, root, options.mode)?;
             eprintln!("{} 已儲存: {}", style("✔").green(), output_path.display());
         }
     }
@@ -326,6 +339,7 @@ fn save_hash_results(
 #[allow(clippy::too_many_lines)]
 fn cmd_verify(args: cli::VerifyArgs, format: onee_checker::report::OutputFormat) -> Result<i32> {
     let hashfile = &args.hashfile;
+    let mode = args.mode();
     if !hashfile.exists() || !hashfile.is_file() {
         return Err(OneeError::InvalidPath(format!("Hash 檔不存在: {}", hashfile.display())));
     }
@@ -467,7 +481,7 @@ fn cmd_verify(args: cli::VerifyArgs, format: onee_checker::report::OutputFormat)
             report.summary.errors
         );
     } else {
-        onee_checker::report::write_verify_report(&mut stdout().lock(), format, &report)
+        onee_checker::report::write_verify_report(&mut stdout().lock(), format, &report, mode)
             .map_err(OneeError::Io)?;
     }
 

@@ -40,7 +40,7 @@ pub mod tree;
 
 /// 為 embedder 提供的便利 prelude
 pub mod prelude {
-    pub use crate::algorithm::{BufferSize, HashAlgo, HashData, HashType};
+    pub use crate::algorithm::{BufferSize, HashAlgo, HashData, HashMode, HashType};
     pub use crate::error::{OneeError, Result};
     pub use crate::fs::{
         build_file_node, canonicalize_root, list_files, parse_hash_file, parse_hash_file_strict,
