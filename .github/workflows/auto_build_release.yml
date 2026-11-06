@@ -30,7 +30,7 @@ jobs:
       version_changed: ${{ steps.check_tag.outputs.changed }}
     steps:
       - name: 檢出程式碼 (Checkout)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -95,7 +95,7 @@ jobs:
 
     steps:
       - name: 檢出程式碼 (Checkout)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 安裝 Rust 工具鏈 (Install Rust)
         uses: dtolnay/rust-toolchain@stable
@@ -155,7 +155,7 @@ jobs:
           fi
 
       - name: 上傳構建產物 (Upload Artifact)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: artifact-${{ matrix.target }}
           path: dist/*.zip
@@ -172,12 +172,12 @@ jobs:
 
     steps:
       - name: 檢出程式碼 (Checkout)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: 下載構建產物 (Download Artifacts)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: artifact-*
